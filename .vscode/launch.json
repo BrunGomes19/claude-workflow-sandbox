@@ -1,0 +1,33 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Radar: DAILY_SCAN (dry-run)",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/radar_export.py",
+      "args": [
+        "--run-mode",
+        "DAILY_SCAN",
+        "--hours",
+        "24",
+        "--dry-run"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Radar: CYCLE_MAP_BUILD (dry-run)",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/radar_export.py",
+      "args": [
+        "--run-mode",
+        "CYCLE_MAP_BUILD",
+        "--dry-run"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}
