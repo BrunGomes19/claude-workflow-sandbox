@@ -359,10 +359,15 @@ def fetch_discovery_rss_items(sources_path: str, max_per_feed: int = 20) -> list
     rss_src = [s for s in sources if s.get("type") == "rss" and s.get("fetchable", False)]
     items: list[dict] = []
     seen:  set[str]   = set()
+    headers = {"User-Agent": "crypto-radar/1.0 (rss trend miner)"}
     for s in rss_src:
         url, label = s.get("url", ""), s.get("label", "")
         try:
-            parsed = feedparser.parse(url)
+            r = requests.get(url, headers=headers, timeout=30)
+            r.raise_for_status()
+            parsed = feedparser.parse(r.text)
+            if parsed.bozo:
+                log("WARN", f"  Discovery RSS bozo [{label}]: {parsed.bozo_exception}")
             count  = 0
             for e in parsed.entries[:max_per_feed]:
                 link = getattr(e, "link", "") or ""
@@ -386,6 +391,8 @@ def fetch_discovery_rss_items(sources_path: str, max_per_feed: int = 20) -> list
                 })
                 count += 1
             log("INFO", f"  Discovery RSS [{label}]: {count} items")
+        except requests.RequestException as exc:
+            log("WARN", f"  Discovery RSS failed [{label}]: {exc}")
         except Exception as exc:
             log("WARN", f"  Discovery RSS failed [{label}]: {exc}")
     log("INFO", f"Discovery: {len(items)} items from {len(rss_src)} RSS feeds")
