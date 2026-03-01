@@ -611,10 +611,12 @@ def enrich_reddit_post(url: str, headers: dict) -> dict:
                 "reddit_score": None, "outbound_url": ""}
 
 
-def trim_ledger_for_prompt(items: list[dict], max_items: int = 30) -> list[dict]:
+def trim_ledger_for_prompt(items: list[dict], max_items: int = 30,
+                           selftext_max: int = 400) -> list[dict]:
     """
     Keep only fields the model needs and clean the text.
     NOTE: engagement filtering happens AFTER enrichment, not here.
+    selftext_max limits selftext chars sent to LLM (default 400 to control prompt size).
     """
     trimmed = []
     for it in items:
@@ -626,7 +628,7 @@ def trim_ledger_for_prompt(items: list[dict], max_items: int = 30) -> list[dict]
             "subreddit":     it.get("subreddit", ""),
             "url":           it.get("url", ""),
             "summary":       strip_html(it.get("summary", "") or "")[:800],
-            "selftext":      it.get("selftext", ""),
+            "selftext":      (it.get("selftext", "") or "")[:selftext_max],
             "reddit_score":  score,
             "num_comments":  comms,
             "outbound_url":  it.get("outbound_url", ""),
@@ -881,7 +883,7 @@ def _ollama_generate(model: str, system: str, prompt: str) -> str:
         "options": {
             "temperature": 0.0,
             "num_predict": 4096,
-            "num_ctx":     8192,
+            "num_ctx":     16384,
         },
     }
     r = requests.post("http://localhost:11434/api/generate",
@@ -895,11 +897,22 @@ def _ollama_generate(model: str, system: str, prompt: str) -> str:
     return raw
 
 
+_SCHEMA_REMINDER = (
+    'REQUIRED OUTPUT SCHEMA — fill every key, tokens must be []:\n'
+    '{"meta":{"run_id":"","generated_at":"","run_mode":"","time_window":"","cycles":[],'
+    '"regime":{"label":"Unknown","confidence":"Low","sources":[]}},'
+    '"sectors":[{"sector":"<ALLOWED SECTOR>","score":0,"confidence":"Low",'
+    '"status":"Speculative","narrative":"","for":[],"against":[],'
+    '"invalidations":[],"top_entities":[],"sources":[]}],'
+    '"tokens":[],"questions_for_user":[]}'
+)
+
 def call_ollama_sectors(model: str, trimmed: list[dict]) -> str:
     prompt = (
         "OUTPUT ONLY the two required XML-tagged blocks. No prose.\n\n"
         f"ALLOWED SECTORS: {', '.join(SECTOR_TAXONOMY)}\n\n"
-        "REDDIT POSTS (ONLY evidence; cite url + published_utc for every claim):\n"
+        + _SCHEMA_REMINDER + "\n\n"
+        + "REDDIT POSTS (ONLY evidence; cite url + published_utc for every claim):\n"
         + json.dumps(trimmed, ensure_ascii=False, indent=2)
         + "\n\nBegin your response with <DATA_JSON> now:"
     )
