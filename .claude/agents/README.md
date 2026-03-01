@@ -1,13 +1,17 @@
-# Project Subagents (v2)
+# Project Subagents (v3)
 
-Copy the `.claude/agents/` folder into your repo root, then commit it.
+Drop `.claude/agents/` into your repo root and commit.
 
-Verification:
+Verify:
 - `ls -la .claude/agents`
 - In Claude Code: `/agents`
-- Or in terminal: `claude agents`
+- In terminal: `claude agents`
 
-Usage patterns (examples):
-- "Use the explorer agent to map this repo and tell me where X lives."
-- "Use code-reviewer to review my diff vs main and output a checklist of required fixes."
-- "Use test-runner to run the project tests and summarize failures + next actions."
+Suggested daily flow:
+1) Use `explorer` to map repo + find run commands
+2) Use main Claude session to implement changes
+3) Use `test-runner` to execute checks
+4) Use `debugger` when failures occur (repro -> isolate -> fix plan)
+5) Use `code-reviewer` before PR/merge
+
+Tip: Keep agents mostly **read-only** (no Write/Edit tools) to reduce churn.
