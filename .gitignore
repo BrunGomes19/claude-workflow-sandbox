@@ -208,3 +208,15 @@ __marimo__/
 
 # Claude worktrees
 .claude/worktrees/
+# --- Crypto Sector Cycle Radar ---
+.env
+.secrets/
+data/
+cycle_sources_cache.json
+trend_ledger.jsonl
+*.jsonl
+
+# Python
+.venv/
+__pycache__/
+*.pyc

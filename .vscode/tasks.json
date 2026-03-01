@@ -1,0 +1,55 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Setup venv + install requirements",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "python -m venv .venv && source .venv/Scripts/activate && pip install -U pip && pip install -r requirements.txt"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Run DAILY_SCAN (24h) DRY_RUN",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "source .venv/Scripts/activate && python radar_export.py --run-mode DAILY_SCAN --hours 24 --dry-run"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Run SECTOR_RANKING (7d) DRY_RUN",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "source .venv/Scripts/activate && python radar_export.py --run-mode SECTOR_RANKING --hours 168 --dry-run"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Run TOKEN_SHORTLIST (7d) DRY_RUN",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "source .venv/Scripts/activate && python radar_export.py --run-mode TOKEN_SHORTLIST --hours 168 --dry-run"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Run CYCLE_MAP_BUILD DRY_RUN",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "source .venv/Scripts/activate && python radar_export.py --run-mode CYCLE_MAP_BUILD --dry-run"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}

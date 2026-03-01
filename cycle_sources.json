@@ -1,0 +1,38 @@
+[
+  {
+    "label": "Bitcoin controlled supply / halving schedule",
+    "url": "https://en.bitcoin.it/wiki/Controlled_supply"
+  },
+  {
+    "label": "Ethereum key moments and history",
+    "url": "https://ethereum.org/en/what-is-ethereum/"
+  },
+  {
+    "label": "Ethereum roadmap: The Merge",
+    "url": "https://ethereum.org/en/roadmap/merge/"
+  },
+  {
+    "label": "Ethereum roadmap: Dencun upgrade",
+    "url": "https://ethereum.org/en/roadmap/dencun/"
+  },
+  {
+    "label": "Ethereum blog: Dencun mainnet announcement",
+    "url": "https://blog.ethereum.org/2024/02/27/dencun-mainnet-announcement"
+  },
+  {
+    "label": "Uniswap: Introducing UNI governance token",
+    "url": "https://blog.uniswap.org/uni"
+  },
+  {
+    "label": "Binance: BNB Smart Chain mainnet announcement",
+    "url": "https://www.binance.com/en/blog/all/421499824684900933"
+  },
+  {
+    "label": "ERC-20 token standard documentation",
+    "url": "https://ethereum.org/en/developers/docs/standards/tokens/erc-20/"
+  },
+  {
+    "label": "Ethereum history timeline",
+    "url": "https://ethereum.org/en/history/"
+  }
+]
