@@ -58,5 +58,48 @@ This repo includes:
 Run tasks:
 - VS Code → Terminal → **Run Task…**
 
+## Phase 2: Discovery Layer
+
+Phase 2 adds a **non-Reddit signal layer** to `TOKEN_SHORTLIST`, improving token discovery and confidence classification.
+
+### What `--discovery` activates
+
+- **RSS feeds**: fetches items from 8 curated crypto research/news feeds (The Block, Messari, Bankless, Decrypt, CoinDesk, Cointelegraph, Token Terminal, The Defiant)
+- **Subreddit merge**: merges `baseline_subreddits` + `discovery_subreddits` from `config.json` (deduped by name)
+- **Enhanced scoring**: `token_confidence_score()` gains `discovery_count`, `fundamentals_hint`, `risk_flag` signals
+- **Tier classification**: every token gets `"tier": "investment_quality"` or `"speculative"`
+- **Subreddit proposals**: LLM proposes up to 3 subreddit adjustments per run (human-review only, nothing auto-applied)
+
+### Example command
+
+```bash
+python radar_export.py --run-mode TOKEN_SHORTLIST --hours 24 --dry-run --discovery
+```
+
+### Discovery sources file
+
+Sources are defined in `discovery_sources.json`. To add a new source:
+1. Add an entry to the `sources` array with `"type": "rss"` and `"fetchable": true`
+2. Sources with `"fetchable": false` are silently skipped (JS-rendered pages)
+
+### Subreddit proposals workflow
+
+After each `--discovery` run, the output JSON includes a `subreddit_proposals` key:
+```json
+{
+  "notice": "HUMAN REVIEW REQUIRED — edit discovery_subreddits in config.json to apply.",
+  "add":    [{"name": "HyperliquidTrading", "reason": "..."}],
+  "remove": []
+}
+```
+To apply a proposal: manually edit `discovery_subreddits` in `config.json`. Nothing is auto-written.
+
+### Interpreting the `tier` field
+
+| Tier | Meaning |
+|------|---------|
+| `investment_quality` | Token appeared in non-Reddit sources **and** confidence ≥ 50 + subreddit_spread ≥ 3; fundamentals language detected |
+| `speculative` | Reddit-only signal or insufficient spread — treat as early-stage watch list |
+
 ## Git + Claude workflow (recommended)
 See `ClaudeBible.md` for the daily routine (worktrees, plan mode, verify, review, cleanup).
