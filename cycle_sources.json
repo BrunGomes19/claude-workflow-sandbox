@@ -1,38 +1,62 @@
-[
-  {
-    "label": "Bitcoin controlled supply / halving schedule",
-    "url": "https://en.bitcoin.it/wiki/Controlled_supply"
+{
+  "phases": {
+    "accumulation": {
+      "label": "Accumulation / Bear Bottom",
+      "subreddits": [
+        {"name": "CryptoCurrency", "feeds": ["rising", "new"]},
+        {"name": "Bitcoin", "feeds": ["new"]},
+        {"name": "CryptoMarkets", "feeds": ["rising"]}
+      ],
+      "reference_urls": [
+        {"label": "Bitcoin halving schedule", "url": "https://en.bitcoin.it/wiki/Controlled_supply"}
+      ]
+    },
+    "bull": {
+      "label": "Early-Mid Bull",
+      "subreddits": [
+        {"name": "ethfinance", "feeds": ["rising", "new"]},
+        {"name": "defi", "feeds": ["rising"]},
+        {"name": "layer2", "feeds": ["rising", "new"]}
+      ],
+      "reference_urls": []
+    },
+    "peak": {
+      "label": "Peak / Late Bull",
+      "subreddits": [
+        {"name": "CryptoCurrency", "feeds": ["rising"]},
+        {"name": "CryptoMarkets", "feeds": ["rising"]},
+        {"name": "solana", "feeds": ["rising", "new"]}
+      ],
+      "reference_urls": []
+    },
+    "bear": {
+      "label": "Bear Market",
+      "subreddits": [
+        {"name": "CryptoCurrency", "feeds": ["new"]},
+        {"name": "ethdev", "feeds": ["new"]},
+        {"name": "ethereum", "feeds": ["new"]}
+      ],
+      "reference_urls": []
+    },
+    "recovery": {
+      "label": "Recovery / Consolidation",
+      "subreddits": [
+        {"name": "CryptoTechnology", "feeds": ["rising", "new"]},
+        {"name": "defi", "feeds": ["new"]},
+        {"name": "RWA", "feeds": ["rising", "new"]}
+      ],
+      "reference_urls": []
+    }
   },
-  {
-    "label": "Ethereum key moments and history",
-    "url": "https://ethereum.org/en/what-is-ethereum/"
-  },
-  {
-    "label": "Ethereum roadmap: The Merge",
-    "url": "https://ethereum.org/en/roadmap/merge/"
-  },
-  {
-    "label": "Ethereum roadmap: Dencun upgrade",
-    "url": "https://ethereum.org/en/roadmap/dencun/"
-  },
-  {
-    "label": "Ethereum blog: Dencun mainnet announcement",
-    "url": "https://blog.ethereum.org/2024/02/27/dencun-mainnet-announcement"
-  },
-  {
-    "label": "Uniswap: Introducing UNI governance token",
-    "url": "https://blog.uniswap.org/uni"
-  },
-  {
-    "label": "Binance: BNB Smart Chain mainnet announcement",
-    "url": "https://www.binance.com/en/blog/all/421499824684900933"
-  },
-  {
-    "label": "ERC-20 token standard documentation",
-    "url": "https://ethereum.org/en/developers/docs/standards/tokens/erc-20/"
-  },
-  {
-    "label": "Ethereum history timeline",
-    "url": "https://ethereum.org/en/history/"
-  }
-]
+  "legacy_cycle_evidence": [
+    {"label": "Bitcoin controlled supply / halving schedule", "url": "https://en.bitcoin.it/wiki/Controlled_supply"},
+    {"label": "Ethereum key moments and history", "url": "https://ethereum.org/en/what-is-ethereum/"},
+    {"label": "Ethereum roadmap: The Merge", "url": "https://ethereum.org/en/roadmap/merge/"},
+    {"label": "Ethereum roadmap: Dencun upgrade", "url": "https://ethereum.org/en/roadmap/dencun/"},
+    {"label": "Ethereum blog: Dencun mainnet announcement", "url": "https://blog.ethereum.org/2024/02/27/dencun-mainnet-announcement"},
+    {"label": "Uniswap: Introducing UNI governance token", "url": "https://blog.uniswap.org/uni"},
+    {"label": "Binance: BNB Smart Chain mainnet announcement", "url": "https://www.binance.com/en/blog/all/421499824684900933"},
+    {"label": "ERC-20 token standard documentation", "url": "https://ethereum.org/en/developers/docs/standards/tokens/erc-20/"},
+    {"label": "Ethereum history timeline", "url": "https://ethereum.org/en/history/"}
+  ]
+}
