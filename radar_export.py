@@ -1,5 +1,8 @@
-import argparse, json, os, re, time
+import argparse, json, os, re, sys, time
 from datetime import datetime, timedelta, timezone
+
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 from zoneinfo import ZoneInfo
 from collections import Counter
 from urllib.parse import urlparse
