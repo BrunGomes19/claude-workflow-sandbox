@@ -48,5 +48,35 @@
     { "name": "ArtificialIntelligenceCrypto", "feeds": ["rising", "new"] },
     { "name": "HyperliquidTrading",           "feeds": ["rising", "new"] }
   ],
+  "core_subreddits": [
+    { "name": "CryptoTechnology",            "feeds": ["rising", "new"] },
+    { "name": "defi",                        "feeds": ["rising", "new"] },
+    { "name": "ethfinance",                  "feeds": ["rising", "new"] },
+    { "name": "ethdev",                      "feeds": ["new"] },
+    { "name": "ethstaker",                   "feeds": ["new"] },
+    { "name": "ethereum",                    "feeds": ["rising", "new"] },
+    { "name": "layer2",                      "feeds": ["new"] },
+    { "name": "Arbitrum",                    "feeds": ["rising", "new"] },
+    { "name": "StarknetCrypto",              "feeds": ["new"] },
+    { "name": "CelestiaNetwork",             "feeds": ["new"] },
+    { "name": "RWA",                         "feeds": ["rising", "new"] },
+    { "name": "Tokenization",                "feeds": ["rising", "new"] },
+    { "name": "depin",                       "feeds": ["rising", "new"] },
+    { "name": "solana",                      "feeds": ["rising", "new"] },
+    { "name": "Avax",                        "feeds": ["rising", "new"] },
+    { "name": "cosmosnetwork",               "feeds": ["rising", "new"] },
+    { "name": "Polkadot",                    "feeds": ["rising", "new"] },
+    { "name": "sui",                         "feeds": ["rising", "new"] }
+  ],
+  "exclude_subreddits": [
+    { "name": "CryptoCurrency", "reason": "Too broad / high hype noise" },
+    { "name": "CryptoMarkets",  "reason": "Price speculation, low fundamentals signal" }
+  ],
+  "limits": {
+    "discovery_limit":         5,
+    "max_posts_per_subreddit": 25,
+    "max_total_posts":        150
+  },
+  "token_tracking": { "tokens": [] },
   "max_items_per_feed": 25
 }

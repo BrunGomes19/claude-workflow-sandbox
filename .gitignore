@@ -209,6 +209,7 @@ __marimo__/
 # Claude worktrees
 .claude/worktrees/
 # --- Crypto Sector Cycle Radar ---
+logs/
 .env
 .secrets/
 data/

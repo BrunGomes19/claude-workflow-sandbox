@@ -1,5 +1,8 @@
-import argparse, json, os, re, time
+import argparse, json, os, pathlib, re, sys, time
 from datetime import datetime, timedelta, timezone
+
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 from zoneinfo import ZoneInfo
 from collections import Counter
 from urllib.parse import urlparse
@@ -21,6 +24,67 @@ def log(level: str, msg: str) -> None:
     icons = {"INFO": "ℹ️ ", "OK": "✅", "WARN": "⚠️ ", "ERROR": "❌", "STEP": "🔄"}
     print(f"[{ts}] {icons.get(level,'  ')} [{level}] {msg}")
 
+_RUN_LOG_PATH: str | None = None
+
+def open_run_log(run_id: str, run_mode: str) -> str:
+    pathlib.Path("logs").mkdir(exist_ok=True)
+    return f"logs/{datetime.now().strftime('%Y%m%d')}_{run_mode}_{run_id}.log"
+
+def log_step(log_path: str, step: str, **data) -> None:
+    if not log_path:
+        return
+    entry = {"ts": datetime.now().isoformat(), "step": step, **data}
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
+
+def write_pending_issue(*, run_id, run_mode, component, error_type,
+                         url, detail, retry_count, outcome, action) -> None:
+    record = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "run_id": run_id, "run_mode": run_mode,
+        "component": component, "error_type": error_type,
+        "url": url, "detail": str(detail)[:500],
+        "retry_count": retry_count, "outcome": outcome, "action": action,
+    }
+    path = pathlib.Path("tasks") / "pending_issues.jsonl"
+    path.parent.mkdir(exist_ok=True)
+    with open(str(path), "a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def fetch_with_retry(url, headers, timeout=30, max_retries=2,
+                     *, run_id="", run_mode="", component="http_fetch"):
+    backoff = [2, 5]
+    for attempt in range(max_retries + 1):
+        try:
+            r = requests.get(url, headers=headers, timeout=timeout)
+            if r.status_code == 429:
+                try:
+                    wait = int(r.headers.get("Retry-After",
+                               backoff[min(attempt, len(backoff)-1)]))
+                except (ValueError, TypeError):
+                    wait = backoff[min(attempt, len(backoff)-1)]
+                log("WARN", f"429 [{component}] — waiting {wait}s")
+                time.sleep(wait)
+                continue
+            r.raise_for_status()
+            return r
+        except requests.RequestException as e:
+            if attempt < max_retries:
+                wait = backoff[min(attempt, len(backoff)-1)]
+                log("WARN", f"Attempt {attempt+1} failed [{component}]: {e} — retry in {wait}s")
+                time.sleep(wait)
+            else:
+                log("ERROR", f"Failed after {max_retries+1} attempts [{component}]: {url}")
+                if run_id:
+                    write_pending_issue(
+                        run_id=run_id, run_mode=run_mode, component=component,
+                        error_type=type(e).__name__, url=url, detail=str(e),
+                        retry_count=attempt, outcome="failed", action="check_pending_issues",
+                    )
+                raise
+    raise RuntimeError("fetch_with_retry: unreachable")
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # SECTOR TAXONOMY
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -38,6 +102,50 @@ SECTOR_TAXONOMY = [
     "Macro/Liquidity",
     "Other/Unknown",
 ]
+
+SECTOR_KEYWORDS: dict[str, list[str]] = {
+    "AI/Compute":            ["ai", "artificial intelligence", "gpu", "compute", "inference",
+                              "agent", "llm", "neural", "machine learning"],
+    "DePIN":                 ["depin", "physical infrastructure", "iot", "wireless", "hotspot",
+                              "sensor", "helium", "hivemapper"],
+    "RWA/Tokenization":      ["rwa", "real world asset", "tokenize", "tokenization",
+                              "treasury", "bond", "real estate", "commodity"],
+    "L2/DA/Modular":         ["layer2", "l2", "rollup", "zk", "optimistic", "data availability",
+                              "modular", "celestia", "eigenlayer", "arbitrum", "starknet"],
+    "Interop/Messaging":     ["bridge", "cross-chain", "interop", "messaging", "ibc",
+                              "wormhole", "layerzero", "axelar"],
+    "Security/Tooling":      ["audit", "security", "tooling", "sdk", "dev tool", "wallet",
+                              "multisig", "exploit", "vulnerability", "hack"],
+    "DeFi (Revenue-driven)": ["defi", "dex", "amm", "lending", "yield", "tvl", "revenue",
+                              "liquidity", "swap", "governance", "staking", "aave", "uniswap"],
+    "Institutional/ETFs":    ["etf", "institutional", "blackrock", "grayscale", "fidelity",
+                              "custody", "regulated", "asset manager"],
+    "Regulation/Policy":     ["sec", "regulation", "policy", "compliance", "cftc", "mica",
+                              "legislation", "congress", "enforcement", "ban"],
+    "Macro/Liquidity":       ["macro", "liquidity", "fed", "interest rate", "inflation",
+                              "recession", "dollar", "monetary", "rate hike", "rate cut"],
+}
+
+def tag_post_sectors(post: dict) -> list[str]:
+    txt = " ".join([
+        post.get("title", "") or "",
+        post.get("summary", "") or "",
+        post.get("selftext", "") or "",
+    ]).lower()
+    return [s for s, kws in SECTOR_KEYWORDS.items() if any(kw in txt for kw in kws)]
+
+def filter_no_sector(items: list[dict]) -> tuple[list[dict], dict]:
+    from collections import Counter
+    kept, discarded, per_sector = [], 0, Counter()
+    for it in items:
+        sectors = tag_post_sectors(it)
+        if sectors:
+            it["_matched_sectors"] = sectors
+            per_sector.update(sectors)
+            kept.append(it)
+        else:
+            discarded += 1
+    return kept, {"discarded": discarded, "kept_per_sector": dict(per_sector)}
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PROMPTS — one per job so each call has a tight, clear contract
@@ -288,17 +396,24 @@ def resolve_phase_subreddits(phase: str | None, cycle_data: dict,
 
 
 def load_subreddits_from_config(cfg: dict, use_discovery: bool = False) -> list[dict]:
-    """Return effective subreddit list. use_discovery=False → backward-compat (cfg["subreddits"]).
-    use_discovery=True → merge baseline + discovery, deduped by name."""
+    """Return effective subreddit list.
+    use_discovery=False → core_subreddits → baseline_subreddits → subreddits, apply exclude filter.
+    use_discovery=True → merge core + discovery, deduped by name, apply exclude filter."""
+    exclude = {e["name"].lower() for e in cfg.get("exclude_subreddits", [])}
     if not use_discovery:
-        return cfg.get("subreddits", [])
-    baseline  = cfg.get("baseline_subreddits", cfg.get("subreddits", []))
+        pool = (cfg.get("core_subreddits")
+                or cfg.get("baseline_subreddits")
+                or cfg.get("subreddits", []))
+        return [s for s in pool if s.get("name", "").lower() not in exclude]
+    baseline  = (cfg.get("core_subreddits")
+                 or cfg.get("baseline_subreddits")
+                 or cfg.get("subreddits", []))
     discovery = cfg.get("discovery_subreddits", [])
     seen: set[str] = set()
     merged: list[dict] = []
     for s in baseline + discovery:
         key = s.get("name", "").lower()
-        if key and key not in seen:
+        if key and key not in seen and key not in exclude:
             seen.add(key)
             merged.append(s)
     return merged
@@ -311,7 +426,8 @@ def parse_entry_time(entry) -> datetime | None:
     return datetime.fromtimestamp(time.mktime(t), tz=timezone.utc)
 
 
-def fetch_reddit_items(cfg: dict, since_utc: datetime) -> list[dict]:
+def fetch_reddit_items(cfg: dict, since_utc: datetime,
+                       run_id: str = "", run_mode: str = "") -> list[dict]:
     items, seen = [], set()
     headers = {"User-Agent": "crypto-radar/1.0 (rss trend miner)"}
     for s in cfg["subreddits"]:
@@ -319,8 +435,9 @@ def fetch_reddit_items(cfg: dict, since_utc: datetime) -> list[dict]:
             url = rss_url(s["name"], feed)
             log("STEP", f"Fetching r/{s['name']} [{feed}] ...")
             try:
-                r = requests.get(url, headers=headers, timeout=30)
-                r.raise_for_status()
+                r = fetch_with_retry(url, headers, timeout=30,
+                                     run_id=run_id, run_mode=run_mode,
+                                     component=f"reddit/{s['name']}/{feed}")
             except requests.RequestException as e:
                 log("WARN", f"Skipping r/{s['name']} [{feed}]: {e}")
                 continue
@@ -349,7 +466,11 @@ def fetch_reddit_items(cfg: dict, since_utc: datetime) -> list[dict]:
     return items
 
 
-def fetch_discovery_rss_items(sources_path: str, max_per_feed: int = 20) -> list[dict]:
+_DISCOVERY_CACHE: dict[str, bytes] = {}
+
+
+def fetch_discovery_rss_items(sources_path: str, max_per_feed: int = 20,
+                               run_id: str = "", run_mode: str = "") -> list[dict]:
     """Parse RSS discovery sources via feedparser. Returns reddit-schema-compatible item dicts."""
     if not os.path.exists(sources_path):
         log("WARN", f"Discovery sources not found: {sources_path} — skipping")
@@ -359,10 +480,20 @@ def fetch_discovery_rss_items(sources_path: str, max_per_feed: int = 20) -> list
     rss_src = [s for s in sources if s.get("type") == "rss" and s.get("fetchable", False)]
     items: list[dict] = []
     seen:  set[str]   = set()
+    headers = {"User-Agent": "crypto-radar/1.0 (rss trend miner)"}
     for s in rss_src:
         url, label = s.get("url", ""), s.get("label", "")
         try:
-            parsed = feedparser.parse(url)
+            if url in _DISCOVERY_CACHE:
+                parsed = feedparser.parse(_DISCOVERY_CACHE[url])
+            else:
+                r = fetch_with_retry(url, headers, timeout=30,
+                                     run_id=run_id, run_mode=run_mode,
+                                     component=f"discovery/{label}")
+                _DISCOVERY_CACHE[url] = r.content
+                parsed = feedparser.parse(r.text)
+            if parsed.bozo:
+                log("WARN", f"  Discovery RSS bozo [{label}]: {parsed.bozo_exception}")
             count  = 0
             for e in parsed.entries[:max_per_feed]:
                 link = getattr(e, "link", "") or ""
@@ -386,6 +517,14 @@ def fetch_discovery_rss_items(sources_path: str, max_per_feed: int = 20) -> list
                 })
                 count += 1
             log("INFO", f"  Discovery RSS [{label}]: {count} items")
+            if count == 0 and run_id:
+                write_pending_issue(
+                    run_id=run_id, run_mode=run_mode, component=f"discovery/{label}",
+                    error_type="ZeroItems", url=url, detail="Feed returned 0 items",
+                    retry_count=0, outcome="zero_items", action="check_pending_issues",
+                )
+        except requests.RequestException as exc:
+            log("WARN", f"  Discovery RSS failed [{label}]: {exc}")
         except Exception as exc:
             log("WARN", f"  Discovery RSS failed [{label}]: {exc}")
     log("INFO", f"Discovery: {len(items)} items from {len(rss_src)} RSS feeds")
@@ -459,8 +598,7 @@ def enrich_reddit_post(url: str, headers: dict) -> dict:
     """Fetch full post body + metadata from Reddit's free public JSON API (no auth)."""
     try:
         jurl = url.rstrip("/") + ".json?raw_json=1"
-        r = requests.get(jurl, headers=headers, timeout=20)
-        r.raise_for_status()
+        r = fetch_with_retry(jurl, headers, timeout=20, max_retries=2, component="enrich")
         post = r.json()[0]["data"]["children"][0]["data"]
         return {
             "selftext":     strip_html(post.get("selftext") or "")[:2500],
@@ -710,7 +848,7 @@ def generate_subreddit_proposals(llm_proposals: list[dict], cfg: dict) -> dict:
     """Post-process LLM subreddit proposals. Output only — does NOT modify config.json."""
     current = {
         s["name"].lower()
-        for pool in ("baseline_subreddits", "discovery_subreddits", "subreddits")
+        for pool in ("core_subreddits", "baseline_subreddits", "discovery_subreddits", "subreddits")
         for s in cfg.get(pool, [])
     }
     result: dict = {
@@ -1181,17 +1319,22 @@ def notion_export(db_id: str, token: str, title: str, props: dict,
     notion    = NotionClient(auth=token)
     json_blob = json.dumps(data, ensure_ascii=False)
 
+    properties = {
+        "Name":       {"title": [{"text": {"content": title}}]},
+        "RunDate":    {"date":  {"start": props["run_date"]}},
+        "RunMode":    {"select": {"name": props["run_mode"]}},
+        "TimeWindow": {"rich_text": [{"text": {"content": props["time_window"]}}]},
+        "TopSectors": {"rich_text": [{"text": {"content": props["top_sectors"]}}]},
+        "Confidence": {"select": {"name": props["confidence"]}},
+        "JsonBlob":   {"rich_text": [{"text": {"content": json_blob[:2000]}}]},
+    }
+    if "posts_analyzed" in props:
+        properties["PostsAnalyzed"]   = {"rich_text": [{"text": {"content": str(props["posts_analyzed"])}}]}
+        properties["SectorCount"]     = {"rich_text": [{"text": {"content": str(props["sector_count"])}}]}
+        properties["DiscoveryItems"]  = {"rich_text": [{"text": {"content": str(props["discovery_items"])}}]}
     page = notion.pages.create(
         parent={"database_id": db_id},
-        properties={
-            "Name":       {"title": [{"text": {"content": title}}]},
-            "RunDate":    {"date":  {"start": props["run_date"]}},
-            "RunMode":    {"select": {"name": props["run_mode"]}},
-            "TimeWindow": {"rich_text": [{"text": {"content": props["time_window"]}}]},
-            "TopSectors": {"rich_text": [{"text": {"content": props["top_sectors"]}}]},
-            "Confidence": {"select": {"name": props["confidence"]}},
-            "JsonBlob":   {"rich_text": [{"text": {"content": json_blob[:2000]}}]},
-        },
+        properties=properties,
     )
     page_id = page["id"]
 
@@ -1271,6 +1414,9 @@ def main():
     run_id = f"{args.run_mode}-{now.strftime('%Y%m%d-%H%M%S')}"
     model  = os.getenv("OLLAMA_MODEL", "mistral:7b-instruct")
 
+    global _RUN_LOG_PATH
+    _RUN_LOG_PATH = open_run_log(run_id, args.run_mode)
+
     log("INFO", f"Run started → {run_id}")
     log("INFO", f"Model       → {model}")
     if args.dry_run:
@@ -1335,6 +1481,12 @@ def main():
 
         cfg         = json.load(open("config.json", "r", encoding="utf-8"))
 
+        # Apply limits from config
+        limits = cfg.get("limits", {})
+        if limits.get("max_posts_per_subreddit"):
+            cfg["max_items_per_feed"] = limits["max_posts_per_subreddit"]
+        cfg["_max_total_posts"] = limits.get("max_total_posts", 150)
+
         # Discovery layer setup
         use_disc = getattr(args, "discovery", False) and args.run_mode == "TOKEN_SHORTLIST"
         cfg["subreddits"] = load_subreddits_from_config(cfg, use_discovery=use_disc)
@@ -1345,6 +1497,8 @@ def main():
             discovery_items = fetch_discovery_rss_items(
                 args.discovery_sources,
                 max_per_feed=cfg.get("max_items_per_feed", 25),
+                run_id=run_id,
+                run_mode=args.run_mode,
             )
 
         # Load cycle sources for phase-aware subreddit selection
@@ -1362,7 +1516,8 @@ def main():
         purge_old_ledger(ledger_path, keep_hours=72)
 
         log("STEP", "Starting Reddit RSS fetch ...")
-        items = fetch_reddit_items(cfg, since_utc)
+        items = fetch_reddit_items(cfg, since_utc, run_id=run_id, run_mode=args.run_mode)
+        log_step(_RUN_LOG_PATH, "reddit_fetch", item_count=len(items))
         append_ledger(ledger_path, run_id, items)
         ledger_recent = load_recent_ledger(ledger_path, since_utc, limit=250)
         log("INFO", f"Ledger loaded: {len(ledger_recent)} items in window")
@@ -1390,12 +1545,20 @@ def main():
         trimmed = [it for it in trimmed if it["engagement"] > 0]
         trimmed.sort(key=lambda x: x["engagement"], reverse=True)
         log("INFO", f"Engagement filter: {before_filter} → {len(trimmed)} posts (sorted by engagement)")
+        log_step(_RUN_LOG_PATH, "engagement_filter", before=before_filter, kept=len(trimmed))
 
         # Meme filter
         if not args.include_memes:
             before  = len(trimmed)
             trimmed = filter_memes(trimmed)
             log("INFO", f"Meme filter: {before} → {len(trimmed)} items")
+            log_step(_RUN_LOG_PATH, "meme_filter", before=before, kept=len(trimmed))
+
+        # Sector pre-filter
+        trimmed, sector_stats = filter_no_sector(trimmed)
+        log("INFO", f"Sector pre-filter: {sector_stats['discarded']} discarded, "
+                    f"kept per sector: {sector_stats['kept_per_sector']}")
+        log_step(_RUN_LOG_PATH, "sector_prefilter", **sector_stats)
 
         # Token candidates
         token_candidates  = extract_token_candidates(trimmed)
@@ -1530,11 +1693,17 @@ def main():
     gen_at = data["meta"]["generated_at"]
     tw     = data["meta"]["time_window"]
 
+    # Guards for CYCLE_MAP_BUILD (no sector_stats / trimmed / confidence_scores)
+    _sector_stats = sector_stats if args.run_mode != "CYCLE_MAP_BUILD" else {}
+    _trimmed      = trimmed      if args.run_mode != "CYCLE_MAP_BUILD" else []
+    _conf_scores  = confidence_scores if args.run_mode == "TOKEN_SHORTLIST" else {}
+
     sector_rows = []
     for s in data.get("sectors", [])[:6]:
+        sec_name = s.get("sector", "")
         sector_rows.append([
             run_id, gen_at, tw,
-            s.get("sector", ""),
+            sec_name,
             s.get("score", 0),
             s.get("confidence", "Low"),
             s.get("status", "Speculative"),
@@ -1543,14 +1712,19 @@ def main():
             "; ".join(s.get("against", [])[:5]),
             "; ".join(s.get("invalidations", [])[:5]),
             ", ".join(s.get("top_entities", [])[:10]),
+            len({it["subreddit"] for it in _trimmed
+                 if sec_name in it.get("_matched_sectors", [])}),
+            len(_trimmed),
+            _sector_stats.get("kept_per_sector", {}).get(sec_name, 0),
         ])
 
     token_rows = []
     for t in data.get("tokens", [])[:10]:
+        sym = t.get("symbol", "")
         token_rows.append([
             run_id, gen_at,
             t.get("sector", ""),
-            t.get("symbol", ""),
+            sym,
             t.get("name", "Unknown"),
             t.get("chain", "Unknown"),
             t.get("spike_score", 0),
@@ -1560,6 +1734,10 @@ def main():
             t.get("thesis", ""),
             "; ".join(t.get("catalysts", [])[:5]),
             "; ".join(t.get("invalidations", [])[:5]),
+            gen_at[:10],
+            ", ".join(_conf_scores.get(sym, {}).get("discovery_sources", [])),
+            _conf_scores.get(sym, {}).get("mentions", 0),
+            "reddit+discovery" if _conf_scores.get(sym, {}).get("discovery_count") else "reddit",
         ])
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -1608,16 +1786,20 @@ def main():
         token=os.getenv("NOTION_TOKEN"),
         title=f"{args.run_mode} – {now.strftime('%Y-%m-%d')}",
         props={
-            "run_date":    now.date().isoformat(),
-            "run_mode":    args.run_mode,
-            "time_window": tw,
-            "top_sectors": top_sectors[:200],
-            "confidence":  confidence,
+            "run_date":       now.date().isoformat(),
+            "run_mode":       args.run_mode,
+            "time_window":    tw,
+            "top_sectors":    top_sectors[:200],
+            "confidence":     confidence,
+            "posts_analyzed": len(_trimmed),
+            "sector_count":   len(data.get("sectors", [])),
+            "discovery_items": len(discovery_items) if args.run_mode != "CYCLE_MAP_BUILD" else 0,
         },
         md=md,
         data=data,
     )
     log("OK", "Notion page created (full JSON as code blocks)")
+    log_step(_RUN_LOG_PATH, "run_complete", run_id=run_id)
     log("OK", f"Run complete → {run_id}")
 
 

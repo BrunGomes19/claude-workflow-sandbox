@@ -152,7 +152,29 @@ git stash -u
 
 ---
 
-## F) Useful next upgrades (optional)
+## F) Run Mode Quick Reference
+
+Always `--dry-run` first. Never export without verifying output locally.
+
+| Mode | Command | When to use |
+|------|---------|-------------|
+| `DAILY_SCAN` | `python radar_export.py --run-mode DAILY_SCAN --hours 24 --dry-run` | Daily sector snapshot |
+| `SECTOR_RANKING` | `python radar_export.py --run-mode SECTOR_RANKING --hours 168 --dry-run` | Weekly sector ranking |
+| `TOKEN_SHORTLIST` | `python radar_export.py --run-mode TOKEN_SHORTLIST --discovery --dry-run` | Token shortlist with discovery |
+| `CYCLE_MAP_BUILD` | `python radar_export.py --run-mode CYCLE_MAP_BUILD --dry-run` | Historical cycle evidence |
+
+### Rule: always `--dry-run` first
+```bash
+# Dry run to verify
+python radar_export.py --run-mode DAILY_SCAN --hours 24 --dry-run
+
+# Only run without --dry-run when output looks correct
+python radar_export.py --run-mode DAILY_SCAN --hours 24
+```
+
+---
+
+## G) Useful next upgrades (optional)
 - Add CI checks (run a dry-run mode in PR)
 - Add Makefile (`make setup`, `make run`)
 - Configure Claude statusline (`/statusline`)
