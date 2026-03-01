@@ -148,6 +148,22 @@ JSON SCHEMA:
   }],
   "questions_for_user":[]
 }
+
+TIER RULES:
+- Every token MUST include "tier": "investment_quality" OR "speculative".
+- investment_quality: token appeared in NON_REDDIT_DISCOVERY_SOURCES OR confidence score >= 50
+  AND subreddit_spread >= 3. Also include a 1-sentence "explanation" field.
+- speculative: everything else. Default to "speculative" when in doubt.
+- Every token MUST include "explanation": one sentence rationale for the tier assignment.
+
+SUBREDDIT PROPOSALS (always output, even if empty):
+- Based on what sectors/tokens you see, propose up to 3 subreddit adjustments to improve signal.
+- ONLY propose subreddits that clearly exist and are crypto-relevant.
+- Output as top-level "subreddit_proposals" array alongside meta/sectors/tokens.
+
+SCHEMA ADDITIONS:
+tokens[*] += { "tier": "speculative", "explanation": "one sentence" }
+Top-level += "subreddit_proposals": [{"action":"add"|"remove","name":"SubName","reason":"..."}]
 """
 
 SYSTEM_PROMPT_CYCLE_MAP = _HARD_RULES + """
@@ -271,6 +287,23 @@ def resolve_phase_subreddits(phase: str | None, cycle_data: dict,
     return cycle_data.get("phases", {}).get(phase, {}).get("subreddits", fallback_subreddits)
 
 
+def load_subreddits_from_config(cfg: dict, use_discovery: bool = False) -> list[dict]:
+    """Return effective subreddit list. use_discovery=False → backward-compat (cfg["subreddits"]).
+    use_discovery=True → merge baseline + discovery, deduped by name."""
+    if not use_discovery:
+        return cfg.get("subreddits", [])
+    baseline  = cfg.get("baseline_subreddits", cfg.get("subreddits", []))
+    discovery = cfg.get("discovery_subreddits", [])
+    seen: set[str] = set()
+    merged: list[dict] = []
+    for s in baseline + discovery:
+        key = s.get("name", "").lower()
+        if key and key not in seen:
+            seen.add(key)
+            merged.append(s)
+    return merged
+
+
 def parse_entry_time(entry) -> datetime | None:
     t = getattr(entry, "published_parsed", None) or getattr(entry, "updated_parsed", None)
     if not t:
@@ -313,6 +346,49 @@ def fetch_reddit_items(cfg: dict, since_utc: datetime) -> list[dict]:
                 })
     items.sort(key=lambda x: x["published_utc"], reverse=True)
     log("OK", f"Fetched {len(items)} unique items across all feeds")
+    return items
+
+
+def fetch_discovery_rss_items(sources_path: str, max_per_feed: int = 20) -> list[dict]:
+    """Parse RSS discovery sources via feedparser. Returns reddit-schema-compatible item dicts."""
+    if not os.path.exists(sources_path):
+        log("WARN", f"Discovery sources not found: {sources_path} — skipping")
+        return []
+    raw     = json.load(open(sources_path, "r", encoding="utf-8"))
+    sources = raw.get("sources", []) if isinstance(raw, dict) else raw
+    rss_src = [s for s in sources if s.get("type") == "rss" and s.get("fetchable", False)]
+    items: list[dict] = []
+    seen:  set[str]   = set()
+    for s in rss_src:
+        url, label = s.get("url", ""), s.get("label", "")
+        try:
+            parsed = feedparser.parse(url)
+            count  = 0
+            for e in parsed.entries[:max_per_feed]:
+                link = getattr(e, "link", "") or ""
+                if link in seen:
+                    continue
+                seen.add(link)
+                dt = parse_entry_time(e)
+                items.append({
+                    "platform":      "discovery",
+                    "source_label":  label,
+                    "source_url":    url,
+                    "title":         e.get("title", ""),
+                    "url":           link,
+                    "published_utc": dt.isoformat() if dt else "",
+                    "summary":       (e.get("summary", "") or "")[:2000],
+                    "selftext":      "",
+                    "subreddit":     "",
+                    "reddit_score":  0,
+                    "num_comments":  0,
+                    "engagement":    0,
+                })
+                count += 1
+            log("INFO", f"  Discovery RSS [{label}]: {count} items")
+        except Exception as exc:
+            log("WARN", f"  Discovery RSS failed [{label}]: {exc}")
+    log("INFO", f"Discovery: {len(items)} items from {len(rss_src)} RSS feeds")
     return items
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -466,6 +542,16 @@ _ENGLISH_WORDS = {
     "top","yes","no","go","up","down",
 }
 
+FUNDAMENTALS_KEYWORDS = re.compile(
+    r"\b(revenue|tvl|fees|protocol|tokenomics|staking|yield|governance|"
+    r"fundrais|raise|series\s+[a-c]|valuation|audit|roadmap|mainnet|"
+    r"developer|on.chain|treasury|total.value.locked|protocol.revenue)\b", re.I)
+
+RISK_KEYWORDS = re.compile(
+    r"\b(rug|scam|hack|exploit|drain|ponzi|honeypot|unaudited|"
+    r"anonymous.team|no.audit|exit.scam|suspicious)\b", re.I)
+
+
 def looks_like_english_word(sym: str) -> bool:
     return sym.lower() in _ENGLISH_WORDS
 
@@ -505,17 +591,34 @@ def candidate_strength(trimmed_items: list[dict],
     return dict(counts)
 
 
-def token_confidence_score(candidates: list[str],
-                           ledger_items: list[dict]) -> dict[str, dict]:
+def _compute_tier(cs: dict) -> str:
+    c  = cs.get("confidence", 0)
+    dc = cs.get("discovery_count", 0)
+    ss = cs.get("subreddit_spread", 0)
+    return "investment_quality" if (c >= 50 and (dc > 0 or ss >= 3)) else "speculative"
+
+
+def _build_score_explanation(m: int, ss: int, dc: int, fund: bool, risk: bool, tier: str) -> str:
+    parts = [f"Reddit:{m}m/{ss}s"]
+    if dc:   parts.append(f"{dc} discovery hit(s)")
+    if fund: parts.append("fundamentals signal")
+    if risk: parts.append("RISK FLAG")
+    parts.append(f"→ {tier}")
+    return " + ".join(parts)
+
+
+def token_confidence_score(
+    candidates: list[str],
+    ledger_items: list[dict],
+    discovery_items: list[dict] | None = None,
+) -> dict[str, dict]:
     """
     Multi-signal confidence score per token candidate.
 
     Returns per-symbol dict with keys:
-      mentions, subreddit_spread, engagement_weight, confidence (0-100).
-
-    Formula:
-      raw = (mentions * 10) + (subreddit_spread * 15) + min(engagement_weight / 100, 30)
-      confidence = min(int(raw), 100)
+      mentions, subreddit_spread, engagement_weight, discovery_count,
+      discovery_sources, fundamentals_hint, risk_flag, confidence (0-100),
+      tier, explanation.
     """
     mentions: Counter        = Counter()
     subreddits: dict         = {}   # symbol -> set of subreddits
@@ -536,16 +639,57 @@ def token_confidence_score(candidates: list[str],
                 engagement[c] += eng
 
     result = {}
-    for c in candidates:
-        m   = mentions.get(c, 0)
-        ss  = len(subreddits.get(c, set()))
-        ew  = engagement.get(c, 0)
-        raw = (m * 10) + (ss * 15) + min(ew / 100, 30)
-        result[c] = {
+    for symbol in candidates:
+        m               = mentions.get(symbol, 0)
+        ss              = len(subreddits.get(symbol, set()))
+        ew              = engagement.get(symbol, 0)
+        engagement_weight = ew
+
+        # Discovery signals
+        discovery_count  = 0
+        fundamentals_hit = False
+        risk_hit         = False
+        discovery_labels: list[str] = []
+        if discovery_items:
+            sym_upper = symbol.upper()
+            for di in discovery_items:
+                text = f"{di.get('title','')} {di.get('summary','') or di.get('selftext','')}".upper()
+                if f"${sym_upper}" in text or f" {sym_upper} " in text or f"({sym_upper})" in text:
+                    discovery_count += 1
+                    discovery_labels.append(di.get("source_label", di.get("source_url", "")))
+                    raw_text = f"{di.get('title','')} {di.get('summary','')}"
+                    if FUNDAMENTALS_KEYWORDS.search(raw_text):
+                        fundamentals_hit = True
+        # Risk check across all items (reddit + discovery)
+        for item in (ledger_items + (discovery_items or [])):
+            if RISK_KEYWORDS.search(f"{item.get('title','')} {item.get('selftext','')} {item.get('summary','')}"):
+                risk_hit = True
+                break
+
+        # Revised scoring formula
+        raw = (
+              m               * 8
+            + ss              * 12
+            + min(engagement_weight // 100, 25)
+            + discovery_count  * 20
+            + (10 if fundamentals_hit else 0)
+            - (20 if risk_hit        else 0)
+        )
+        confidence = max(0, min(int(raw), 100))
+        tier       = _compute_tier({"confidence": confidence, "discovery_count": discovery_count,
+                                    "subreddit_spread": ss})
+        result[symbol] = {
             "mentions":          m,
             "subreddit_spread":  ss,
-            "engagement_weight": ew,
-            "confidence":        min(int(raw), 100),
+            "engagement_weight": engagement_weight,
+            "discovery_count":   discovery_count,
+            "discovery_sources": discovery_labels[:5],
+            "fundamentals_hint": fundamentals_hit,
+            "risk_flag":         risk_hit,
+            "confidence":        confidence,
+            "tier":              tier,
+            "explanation":       _build_score_explanation(m, ss, discovery_count,
+                                                          fundamentals_hit, risk_hit, tier),
         }
     return result
 
@@ -560,6 +704,31 @@ def has_non_reddit_source(sources: list[dict]) -> bool:
         if dom and "reddit.com" not in dom:
             return True
     return False
+
+
+def generate_subreddit_proposals(llm_proposals: list[dict], cfg: dict) -> dict:
+    """Post-process LLM subreddit proposals. Output only — does NOT modify config.json."""
+    current = {
+        s["name"].lower()
+        for pool in ("baseline_subreddits", "discovery_subreddits", "subreddits")
+        for s in cfg.get(pool, [])
+    }
+    result: dict = {
+        "notice": "HUMAN REVIEW REQUIRED — edit discovery_subreddits in config.json to apply.",
+        "add":    [],
+        "remove": [],
+    }
+    for p in (llm_proposals or []):
+        action = (p.get("action") or "").lower()
+        name   = (p.get("name") or "").strip()
+        reason = (p.get("reason") or "").strip()
+        if not name:
+            continue
+        if action == "add" and name.lower() not in current:
+            result["add"].append({"name": name, "reason": reason})
+        elif action == "remove" and name.lower() in current:
+            result["remove"].append({"name": name, "reason": reason})
+    return result
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # OLLAMA CALLERS
@@ -604,7 +773,8 @@ def call_ollama_sectors(model: str, trimmed: list[dict]) -> str:
 def call_ollama_tokens(model: str, trimmed: list[dict], focus_sectors: list[str],
                        token_candidates: list[str],
                        token_strength: dict[str, int],
-                       confidence_scores: dict[str, dict] | None = None) -> str:
+                       confidence_scores: dict[str, dict] | None = None,
+                       discovery_snippets: list[dict] | None = None) -> str:
     confidence_block = ""
     if confidence_scores:
         confidence_block = (
@@ -612,12 +782,26 @@ def call_ollama_tokens(model: str, trimmed: list[dict], focus_sectors: list[str]
             + json.dumps(confidence_scores, ensure_ascii=False)
             + "\n"
         )
+    discovery_block = ""
+    if discovery_snippets:
+        slim = [
+            {"label": d.get("source_label",""), "title": d.get("title",""),
+             "snippet": (d.get("summary","") or "")[:400]}
+            for d in discovery_snippets if d.get("platform") == "discovery"
+        ][:12]
+        if slim:
+            discovery_block = (
+                "NON_REDDIT_DISCOVERY_SOURCES (token mention here = external signal; "
+                "fundamentals language = investment_quality hint):\n"
+                + json.dumps(slim, ensure_ascii=False) + "\n"
+            )
     prompt = (
         "OUTPUT ONLY the two required XML-tagged blocks. No prose.\n\n"
         f"FOCUS SECTORS (only shortlist tokens in these sectors): {focus_sectors}\n"
         f"TOKEN CANDIDATES: {token_candidates}\n"
         f"TOKEN_MENTION_COUNTS (require >=2 or non-Reddit primary source): {token_strength}\n"
         + confidence_block
+        + discovery_block
         + "\nREDDIT POSTS (ONLY evidence):\n"
         + json.dumps(trimmed, ensure_ascii=False, indent=2)
         + "\n\nBegin your response with <DATA_JSON> now:"
@@ -896,11 +1080,13 @@ def enforce_sector_gates(data: dict) -> None:
 
 
 def enforce_token_gates(data: dict, candidates: list[str],
-                        strength: dict[str, int]) -> None:
+                        strength: dict[str, int],
+                        confidence_scores: dict[str, dict] | None = None) -> None:
     """
     Hard gate — runs after parsing, regardless of what the model said.
     Drops tokens that: are not in candidates / look like English words /
     have <2 mentions AND no primary non-Reddit source.
+    Also enforces deterministic tier from confidence_scores when available.
     """
     cand_set = set(c.upper() for c in (candidates or []))
     kept = []
@@ -920,6 +1106,16 @@ def enforce_token_gates(data: dict, candidates: list[str],
             log("INFO", f"  Token '{sym}' dropped (mentions={mentions}, no primary source)")
             continue
         kept.append(t)
+    # Enforce deterministic tier from confidence_scores
+    for t in kept:
+        sym = (t.get("symbol") or "").upper().strip()
+        cs = (confidence_scores or {}).get(sym, {})
+        if cs:
+            t["tier"] = cs.get("tier") or _compute_tier(cs)
+            if "explanation" not in t:
+                t["explanation"] = cs.get("explanation", "")
+        elif t.get("tier") not in ("investment_quality", "speculative"):
+            t["tier"] = "speculative"
     data["tokens"] = kept[:10]
 
 
@@ -1061,6 +1257,14 @@ def main():
                     choices=["2017_bull", "2020_defi", "2021_bull", "2022_bear", "2024_halving"],
                     default=None,
                     help="Filter CYCLE_MAP_BUILD to a specific named cycle")
+    ap.add_argument("--discovery", action="store_true",
+                    help="Enable non-Reddit discovery layer (TOKEN_SHORTLIST only)")
+    ap.add_argument("--discovery-sources", default="discovery_sources.json",
+                    help="Path to discovery sources JSON")
+    ap.add_argument("--discovery-cache",   default="discovery_sources_cache.json",
+                    help="Path to discovery fetch cache (currently unused — RSS is stateless)")
+    ap.add_argument("--refresh-discovery", action="store_true",
+                    help="Reserved for future discovery cache refresh")
     args = ap.parse_args()
 
     now    = datetime.now(tz)
@@ -1131,6 +1335,18 @@ def main():
 
         cfg         = json.load(open("config.json", "r", encoding="utf-8"))
 
+        # Discovery layer setup
+        use_disc = getattr(args, "discovery", False) and args.run_mode == "TOKEN_SHORTLIST"
+        cfg["subreddits"] = load_subreddits_from_config(cfg, use_discovery=use_disc)
+
+        discovery_items: list[dict] = []
+        if use_disc:
+            log("STEP", "Fetching non-Reddit discovery sources ...")
+            discovery_items = fetch_discovery_rss_items(
+                args.discovery_sources,
+                max_per_feed=cfg.get("max_items_per_feed", 25),
+            )
+
         # Load cycle sources for phase-aware subreddit selection
         _raw_cs = json.load(open(args.cycle_sources, "r", encoding="utf-8")) \
                   if os.path.exists(args.cycle_sources) else []
@@ -1183,9 +1399,16 @@ def main():
 
         # Token candidates
         token_candidates  = extract_token_candidates(trimmed)
+        if use_disc and discovery_items:
+            disc_cands = extract_token_candidates(discovery_items)
+            token_candidates = list(dict.fromkeys(token_candidates + disc_cands))
+            log("INFO", f"Discovery added {len(disc_cands)} candidates; total: {len(token_candidates)}")
         strength          = candidate_strength(trimmed, token_candidates)
         strong_candidates = [c for c in token_candidates if strength.get(c, 0) >= 1]
-        confidence_scores = token_confidence_score(strong_candidates, trimmed)
+        confidence_scores = token_confidence_score(
+            strong_candidates, trimmed,
+            discovery_items=discovery_items if use_disc else None,
+        )
         log("INFO",
             f"Token candidates ({len(strong_candidates)}): {strong_candidates[:20]}"
             f"{'...' if len(strong_candidates) > 20 else ''}")
@@ -1236,7 +1459,8 @@ def main():
                     raw2 = call_ollama_tokens(
                         model, trimmed, focus_sectors,
                         strong_candidates, strength,
-                        confidence_scores
+                        confidence_scores,
+                        discovery_snippets=discovery_items if use_disc else None,
                     )
                     print(f"\n{'─'*60}\n  OLLAMA RAW — TOKENS (attempt {attempt+1})\n{'─'*60}")
                     print(raw2[:3000])
@@ -1245,7 +1469,8 @@ def main():
                     clamp_scores(d2)
                     normalize_list_fields(d2)
                     normalize_sectors(d2)
-                    enforce_token_gates(d2, strong_candidates, strength)
+                    enforce_token_gates(d2, strong_candidates, strength,
+                                        confidence_scores=confidence_scores)
                     log("OK", f"Tokens pass: {len(d2.get('tokens',[]))} tokens kept")
                     break
                 except (ValueError, json.JSONDecodeError) as e:
@@ -1254,11 +1479,19 @@ def main():
                         d2  = _fallback_data(run_id, now, args.run_mode, time_window)
                         md2 = "_Token pass failed._"
 
+            # Wire subreddit proposals
+            proposals = generate_subreddit_proposals(d2.pop("subreddit_proposals", []), cfg)
+            d2["subreddit_proposals"] = proposals
+            if proposals["add"] or proposals["remove"]:
+                log("WARN", f"Subreddit proposals (review manually): "
+                            f"+{len(proposals['add'])} add, -{len(proposals['remove'])} remove")
+
             # Merge both passes
             data = {
                 "meta":    d1.get("meta", {}),
                 "sectors": ranked[:6],
                 "tokens":  d2.get("tokens", [])[:10],
+                "subreddit_proposals": proposals,
                 "questions_for_user": (
                     d1.get("questions_for_user", []) +
                     d2.get("questions_for_user", [])
@@ -1322,6 +1555,7 @@ def main():
             t.get("chain", "Unknown"),
             t.get("spike_score", 0),
             t.get("confidence", "Low"),
+            t.get("tier", "speculative"),
             t.get("status", "Speculative"),
             t.get("thesis", ""),
             "; ".join(t.get("catalysts", [])[:5]),
