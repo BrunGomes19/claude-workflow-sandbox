@@ -481,6 +481,51 @@ def candidate_strength(trimmed_items: list[dict],
     return dict(counts)
 
 
+def token_confidence_score(candidates: list[str],
+                           ledger_items: list[dict]) -> dict[str, dict]:
+    """
+    Multi-signal confidence score per token candidate.
+
+    Returns per-symbol dict with keys:
+      mentions, subreddit_spread, engagement_weight, confidence (0-100).
+
+    Formula:
+      raw = (mentions * 10) + (subreddit_spread * 15) + min(engagement_weight / 100, 30)
+      confidence = min(int(raw), 100)
+    """
+    mentions: Counter        = Counter()
+    subreddits: dict         = {}   # symbol -> set of subreddits
+    engagement: Counter      = Counter()
+
+    for it in ledger_items:
+        txt = (
+            it.get("title", "") + " " +
+            it.get("summary", "") + " " +
+            it.get("selftext", "")
+        ).upper()
+        sub = it.get("subreddit", "")
+        eng = (it.get("reddit_score", 0) or 0) + 2 * (it.get("num_comments", 0) or 0)
+        for c in candidates:
+            if f"${c}" in txt or f"({c})" in txt:
+                mentions[c] += 1
+                subreddits.setdefault(c, set()).add(sub)
+                engagement[c] += eng
+
+    result = {}
+    for c in candidates:
+        m   = mentions.get(c, 0)
+        ss  = len(subreddits.get(c, set()))
+        ew  = engagement.get(c, 0)
+        raw = (m * 10) + (ss * 15) + min(ew / 100, 30)
+        result[c] = {
+            "mentions":          m,
+            "subreddit_spread":  ss,
+            "engagement_weight": ew,
+            "confidence":        min(int(raw), 100),
+        }
+    return result
+
+
 def has_non_reddit_source(sources: list[dict]) -> bool:
     """True if at least one source URL is outside reddit.com."""
     for s in (sources or []):
@@ -534,13 +579,22 @@ def call_ollama_sectors(model: str, trimmed: list[dict]) -> str:
 
 def call_ollama_tokens(model: str, trimmed: list[dict], focus_sectors: list[str],
                        token_candidates: list[str],
-                       token_strength: dict[str, int]) -> str:
+                       token_strength: dict[str, int],
+                       confidence_scores: dict[str, dict] | None = None) -> str:
+    confidence_block = ""
+    if confidence_scores:
+        confidence_block = (
+            "TOKEN_CONFIDENCE_SCORES (mentions/subreddit_spread/engagement_weight/confidence 0-100):\n"
+            + json.dumps(confidence_scores, ensure_ascii=False)
+            + "\n"
+        )
     prompt = (
         "OUTPUT ONLY the two required XML-tagged blocks. No prose.\n\n"
         f"FOCUS SECTORS (only shortlist tokens in these sectors): {focus_sectors}\n"
         f"TOKEN CANDIDATES: {token_candidates}\n"
-        f"TOKEN_MENTION_COUNTS (require >=2 or non-Reddit primary source): {token_strength}\n\n"
-        "REDDIT POSTS (ONLY evidence):\n"
+        f"TOKEN_MENTION_COUNTS (require >=2 or non-Reddit primary source): {token_strength}\n"
+        + confidence_block
+        + "\nREDDIT POSTS (ONLY evidence):\n"
         + json.dumps(trimmed, ensure_ascii=False, indent=2)
         + "\n\nBegin your response with <DATA_JSON> now:"
     )
@@ -1038,10 +1092,12 @@ def main():
         token_candidates  = extract_token_candidates(trimmed)
         strength          = candidate_strength(trimmed, token_candidates)
         strong_candidates = [c for c in token_candidates if strength.get(c, 0) >= 1]
+        confidence_scores = token_confidence_score(strong_candidates, trimmed)
         log("INFO",
             f"Token candidates ({len(strong_candidates)}): {strong_candidates[:20]}"
             f"{'...' if len(strong_candidates) > 20 else ''}")
         log("INFO", f"Mention ≥2: { {k:v for k,v in strength.items() if v>=2} }")
+        log("INFO", f"Confidence scores: { {k:v['confidence'] for k,v in confidence_scores.items()} }")
 
         MAX_RETRIES = 3
 
@@ -1086,7 +1142,8 @@ def main():
                 try:
                     raw2 = call_ollama_tokens(
                         model, trimmed, focus_sectors,
-                        strong_candidates, strength
+                        strong_candidates, strength,
+                        confidence_scores
                     )
                     print(f"\n{'─'*60}\n  OLLAMA RAW — TOKENS (attempt {attempt+1})\n{'─'*60}")
                     print(raw2[:3000])
