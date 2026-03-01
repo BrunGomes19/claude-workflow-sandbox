@@ -1,4 +1,4 @@
-import argparse, json, os, re, sys, time
+import argparse, json, os, pathlib, re, sys, time
 from datetime import datetime, timedelta, timezone
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -23,6 +23,33 @@ def log(level: str, msg: str) -> None:
     ts = datetime.now().strftime("%H:%M:%S")
     icons = {"INFO": "ℹ️ ", "OK": "✅", "WARN": "⚠️ ", "ERROR": "❌", "STEP": "🔄"}
     print(f"[{ts}] {icons.get(level,'  ')} [{level}] {msg}")
+
+_RUN_LOG_PATH: str | None = None
+
+def open_run_log(run_id: str, run_mode: str) -> str:
+    pathlib.Path("logs").mkdir(exist_ok=True)
+    return f"logs/{datetime.now().strftime('%Y%m%d')}_{run_mode}_{run_id}.log"
+
+def log_step(log_path: str, step: str, **data) -> None:
+    if not log_path:
+        return
+    entry = {"ts": datetime.now().isoformat(), "step": step, **data}
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
+
+def write_pending_issue(*, run_id, run_mode, component, error_type,
+                         url, detail, retry_count, outcome, action) -> None:
+    record = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "run_id": run_id, "run_mode": run_mode,
+        "component": component, "error_type": error_type,
+        "url": url, "detail": str(detail)[:500],
+        "retry_count": retry_count, "outcome": outcome, "action": action,
+    }
+    path = pathlib.Path("tasks") / "pending_issues.jsonl"
+    path.parent.mkdir(exist_ok=True)
+    with open(str(path), "a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SECTOR TAXONOMY
@@ -1281,6 +1308,9 @@ def main():
     run_id = f"{args.run_mode}-{now.strftime('%Y%m%d-%H%M%S')}"
     model  = os.getenv("OLLAMA_MODEL", "mistral:7b-instruct")
 
+    global _RUN_LOG_PATH
+    _RUN_LOG_PATH = open_run_log(run_id, args.run_mode)
+
     log("INFO", f"Run started → {run_id}")
     log("INFO", f"Model       → {model}")
     if args.dry_run:
@@ -1373,6 +1403,7 @@ def main():
 
         log("STEP", "Starting Reddit RSS fetch ...")
         items = fetch_reddit_items(cfg, since_utc)
+        log_step(_RUN_LOG_PATH, "reddit_fetch", item_count=len(items))
         append_ledger(ledger_path, run_id, items)
         ledger_recent = load_recent_ledger(ledger_path, since_utc, limit=250)
         log("INFO", f"Ledger loaded: {len(ledger_recent)} items in window")
@@ -1400,12 +1431,14 @@ def main():
         trimmed = [it for it in trimmed if it["engagement"] > 0]
         trimmed.sort(key=lambda x: x["engagement"], reverse=True)
         log("INFO", f"Engagement filter: {before_filter} → {len(trimmed)} posts (sorted by engagement)")
+        log_step(_RUN_LOG_PATH, "engagement_filter", before=before_filter, kept=len(trimmed))
 
         # Meme filter
         if not args.include_memes:
             before  = len(trimmed)
             trimmed = filter_memes(trimmed)
             log("INFO", f"Meme filter: {before} → {len(trimmed)} items")
+            log_step(_RUN_LOG_PATH, "meme_filter", before=before, kept=len(trimmed))
 
         # Token candidates
         token_candidates  = extract_token_candidates(trimmed)
@@ -1628,6 +1661,7 @@ def main():
         data=data,
     )
     log("OK", "Notion page created (full JSON as code blocks)")
+    log_step(_RUN_LOG_PATH, "run_complete", run_id=run_id)
     log("OK", f"Run complete → {run_id}")
 
 
