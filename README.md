@@ -50,6 +50,27 @@ Helpful flags:
 - `--include-memes` includes meme-like posts (default excludes)
 - `--refresh-cycle-sources` forces re-fetch for cycle sources cache
 
+## Run Mode Reference
+
+| Mode | Purpose | Command example | Outputs |
+|------|---------|----------------|---------|
+| `DAILY_SCAN` | 24h sector snapshot | `--run-mode DAILY_SCAN --hours 24` | Sector rows → Sheets + Notion page |
+| `SECTOR_RANKING` | Multi-day ranking | `--run-mode SECTOR_RANKING --hours 168` | Ranked sector rows |
+| `TOKEN_SHORTLIST` | Sectors → tokens (2-pass) | `--run-mode TOKEN_SHORTLIST --discovery` | Sector + token rows; subreddit proposals |
+| `CYCLE_MAP_BUILD` | Historical cycle playbook | `--run-mode CYCLE_MAP_BUILD` | Cycle evidence JSON + Notion page |
+
+### Per-run artifacts
+
+| Artifact | Location | Description |
+|----------|----------|-------------|
+| Run log | `logs/YYYYMMDD_MODE_RUNID.log` | JSON-lines log of each pipeline step |
+| Pending issues | `tasks/pending_issues.jsonl` | Network failures and zero-item feeds |
+| Sheets sectors tab | `sectors` | One row per sector per run |
+| Sheets tokens tab | `tokens` | One row per token (TOKEN_SHORTLIST only) |
+| Notion page | Database page per run | Full markdown + JSON output |
+
+> Always use `--dry-run` first to verify pipeline without writing to Sheets/Notion.
+
 ## VS Code helpers
 This repo includes:
 - `.vscode/tasks.json` — one-click tasks (setup, run modes)
