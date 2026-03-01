@@ -220,6 +220,30 @@ EXAMPLE OF CORRECT OUTPUT STRUCTURE (fill with real content from evidence):
 
 Now produce your real analysis using ONLY the evidence pack provided.
 Every claim must cite a source URL + date from that evidence. Do not invent facts.
+
+VARIABLE FRAMEWORK — analyse these signals when building the cycle playbook:
+
+MACRO: Fed funds rate direction (hiking/holding/cutting); M2 YoY growth;
+DXY trend; Fed balance sheet trajectory.
+
+BITCOIN ON-CHAIN: Halving supply shock timing; MVRV-Z (over/undervalued);
+SOPR (profit-taking signal); exchange net inflows (distribution) vs outflows (accumulation).
+
+SECTORS: TVL growth rate by chain; DEX volume as % of total;
+dominant narrative per cycle phase (yield, NFT, L2, RWA, AI);
+sector rotation sequence.
+
+TOKENS — for every token in evidence, assign:
+  growth_type: "quick" (spike <3 months then retrace),
+               "sustained" (>6 months with fundamental backing),
+               "mixed" (pump then partial sustained recovery)
+  sustainability_correlates: list from [revenue, DAU, tokenomics_quality,
+    emission_schedule, protocol_revenue, audit_status, institutional_adoption]
+
+BTC DRIVER ANALYSIS — for each cycle:
+  btc_up_driver: primary catalyst (e.g. halving supply shock, ETF inflows, macro liquidity)
+  btc_down_driver: primary catalyst (e.g. regulatory shock, macro tightening, CeFi collapse)
+  Cite source URL + date for every driver claim.
 """
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -602,7 +626,8 @@ def call_ollama_tokens(model: str, trimmed: list[dict], focus_sectors: list[str]
     return _ollama_generate(model, SYSTEM_PROMPT_TOKENS_ONLY, prompt)
 
 
-def call_ollama_cycle(model: str, evidence_pack: list[dict]) -> str:
+def call_ollama_cycle(model: str, evidence_pack: list[dict],
+                      cycle_meta: dict | None = None) -> str:
     # Send only label + url + date_hint + first 1000 chars of snippet
     # to keep total prompt under ~12k chars
     slim_pack = [
@@ -615,10 +640,24 @@ def call_ollama_cycle(model: str, evidence_pack: list[dict]) -> str:
         for e in evidence_pack
         if not e.get("snippet", "").startswith("[FETCH_FAILED]")
     ]
+    cycle_context_block = ""
+    if cycle_meta:
+        cycle_context_block = (
+            "\nCYCLE CONTEXT (use this to frame your analysis):\n"
+            + json.dumps({
+                "label":             cycle_meta.get("label", ""),
+                "time_boundaries":   cycle_meta.get("time_boundaries", {}),
+                "key_events":        cycle_meta.get("key_events", []),
+                "macro_context":     cycle_meta.get("macro_context", ""),
+                "tracked_variables": cycle_meta.get("tracked_variables", {}),
+            }, ensure_ascii=False, indent=2)
+            + "\n"
+        )
     prompt = (
         "OUTPUT ONLY the two required XML-tagged blocks. No prose.\n\n"
         f"ALLOWED SECTORS: {', '.join(SECTOR_TAXONOMY)}\n\n"
-        "EVIDENCE PACK (cite url + date_hint for every claim):\n"
+        + cycle_context_block
+        + "EVIDENCE PACK (cite url + date_hint for every claim):\n"
         + json.dumps(slim_pack, ensure_ascii=False, indent=2)
         + "\n\nBegin your response with <DATA_JSON> now:"
     )
@@ -639,8 +678,46 @@ def _infer_date(snippet: str) -> str:
     return m.group(0) if m else "Unknown"
 
 
+def _collect_cycle_sources(raw: dict, cycle_filter: str | None = None) -> list[dict]:
+    """
+    Aggregate sources from cycle_sources.json, deduplicated by URL.
+    Order: 1) legacy_cycle_evidence (always)  2) cycles[filter] or all cycles
+           3) categories[*].sources filtered by cycle_tags
+    """
+    seen_urls: set[str] = set()
+    out: list[dict] = []
+
+    def _add(entry: dict) -> None:
+        url = (entry.get("url") or "").strip()
+        if not url or url in seen_urls:
+            return
+        seen_urls.add(url)
+        out.append(entry)
+
+    for entry in raw.get("legacy_cycle_evidence", []):
+        _add(entry)
+
+    cycles_block = raw.get("cycles", {})
+    if cycle_filter:
+        for entry in cycles_block.get(cycle_filter, {}).get("sources", []):
+            _add(entry)
+    else:
+        for cycle_obj in cycles_block.values():
+            for entry in cycle_obj.get("sources", []):
+                _add(entry)
+
+    for cat_obj in raw.get("categories", {}).values():
+        for entry in cat_obj.get("sources", []):
+            tags = entry.get("cycle_tags", [])
+            if cycle_filter and cycle_filter not in tags:
+                continue
+            _add(entry)
+
+    return out
+
+
 def build_cycle_evidence(sources_path: str, cache_path: str,
-                         refresh: bool) -> list[dict]:
+                         refresh: bool, cycle_filter: str | None = None) -> list[dict]:
     """
     For each URL in cycle_sources.json: fetch page, strip HTML, cache result.
     On subsequent runs the cache is used unless --refresh-cycle-sources is passed.
@@ -662,10 +739,10 @@ def build_cycle_evidence(sources_path: str, cache_path: str,
         )
 
     raw = json.load(open(sources_path, "r", encoding="utf-8"))
-    if isinstance(raw, list):                        # legacy flat array
+    if isinstance(raw, list):              # legacy flat array (oldest format)
         sources = raw
-    else:                                            # new phase-keyed schema
-        sources = raw.get("legacy_cycle_evidence", [])
+    else:
+        sources = _collect_cycle_sources(raw, cycle_filter)
     out = []
 
     for s in sources:
@@ -980,6 +1057,10 @@ def main():
                     choices=["accumulation", "bull", "peak", "bear", "recovery"],
                     default=None,
                     help="Override market cycle phase for source selection")
+    ap.add_argument("--cycle",
+                    choices=["2017_bull", "2020_defi", "2021_bull", "2022_bear", "2024_halving"],
+                    default=None,
+                    help="Filter CYCLE_MAP_BUILD to a specific named cycle")
     args = ap.parse_args()
 
     now    = datetime.now(tz)
@@ -999,17 +1080,29 @@ def main():
     # ─────────────────────────────────────────────────────────────────────────
     if args.run_mode == "CYCLE_MAP_BUILD":
         log("STEP", "Building cycle evidence pack ...")
+
+        cycle_meta: dict | None = None
+        if getattr(args, "cycle", None):
+            _raw_cs = json.load(open(args.cycle_sources, "r", encoding="utf-8"))
+            if isinstance(_raw_cs, dict):
+                cycle_meta = _raw_cs.get("cycles", {}).get(args.cycle)
+                if cycle_meta:
+                    log("INFO", f"Cycle filter: {args.cycle} → {cycle_meta.get('label','')}")
+                else:
+                    log("WARN", f"Cycle '{args.cycle}' not found — using all sources")
+
         evidence = build_cycle_evidence(
             sources_path=args.cycle_sources,
             cache_path=args.cycle_cache,
             refresh=args.refresh_cycle_sources,
+            cycle_filter=getattr(args, "cycle", None),
         )
         log("INFO", f"Evidence pack: {len(evidence)} sources ready")
 
         MAX_RETRIES = 3
         for attempt in range(MAX_RETRIES):
             try:
-                raw = call_ollama_cycle(model, evidence)
+                raw = call_ollama_cycle(model, evidence, cycle_meta=cycle_meta)
                 print(f"\n{'─'*60}\n  OLLAMA RAW (attempt {attempt+1})\n{'─'*60}")
                 print(raw[:5000])
                 print(f"{'─'*60}\n")

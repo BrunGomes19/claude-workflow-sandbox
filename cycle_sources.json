@@ -58,5 +58,422 @@
     {"label": "Binance: BNB Smart Chain mainnet announcement", "url": "https://www.binance.com/en/blog/all/421499824684900933"},
     {"label": "ERC-20 token standard documentation", "url": "https://ethereum.org/en/developers/docs/standards/tokens/erc-20/"},
     {"label": "Ethereum history timeline", "url": "https://ethereum.org/en/history/"}
-  ]
+  ],
+  "cycles": {
+    "2017_bull": {
+      "label": "ICO Bull Run",
+      "time_boundaries": {"start": "2016-07", "end": "2018-12"},
+      "key_events": [
+        {"date": "2016-07-09", "event": "Bitcoin second halving (block reward 25 → 12.5 BTC)"},
+        {"date": "2017-01-01", "event": "BTC starts year at ~$1,000; ETH at ~$8"},
+        {"date": "2017-06-01", "event": "ICO boom accelerates; ETH hits $300"},
+        {"date": "2017-12-17", "event": "BTC all-time high ~$19,783"},
+        {"date": "2018-01-01", "event": "Altcoin season peak; ETH hits ~$1,400"},
+        {"date": "2018-12-15", "event": "BTC bear market bottom ~$3,200"}
+      ],
+      "macro_context": "Low US interest rates (Fed Funds 1.0-2.5%); moderate M2 growth; DXY weakening 2017; benign liquidity conditions enabled retail speculation.",
+      "tracked_variables": {
+        "macro": ["Fed funds rate direction", "DXY trend", "M2 YoY growth"],
+        "bitcoin": ["Halving supply shock timing", "MVRV-Z", "Exchange net flows"],
+        "sectors": ["ICO fundraising volume", "ETH gas usage", "ERC-20 token launches"],
+        "tokens": ["ETH", "XRP", "LTC", "NEO", "EOS"]
+      },
+      "phase_sequence": ["accumulation", "bull", "peak", "bear"],
+      "sources": []
+    },
+    "2020_defi": {
+      "label": "DeFi Summer",
+      "time_boundaries": {"start": "2020-03", "end": "2020-11"},
+      "key_events": [
+        {"date": "2020-03-12", "event": "COVID crash — BTC drops 50% in one day (Black Thursday)"},
+        {"date": "2020-05-11", "event": "Bitcoin third halving (block reward 12.5 → 6.25 BTC)"},
+        {"date": "2020-06-15", "event": "Compound COMP liquidity mining launches DeFi Summer"},
+        {"date": "2020-08-01", "event": "Uniswap V2 TVL surpasses $1B; YFI launch"},
+        {"date": "2020-09-17", "event": "Uniswap launches UNI governance token via retroactive airdrop"},
+        {"date": "2020-11-04", "event": "ETH 2.0 deposit contract launches; DeFi narrative consolidates"}
+      ],
+      "macro_context": "Fed emergency rate cuts to 0-0.25% in March 2020; Fed balance sheet expansion (QE) from $4T to $7T; M2 surge +25% YoY; DXY weakened as USD liquidity flooded markets.",
+      "tracked_variables": {
+        "macro": ["Fed funds rate (0-0.25%)", "Fed balance sheet expansion", "M2 YoY growth", "DXY weakness"],
+        "bitcoin": ["Halving supply shock", "MVRV-Z undervalued → fair value", "Exchange outflows accumulation"],
+        "sectors": ["DeFi TVL growth", "DEX volume vs CEX", "Yield farming APY", "Governance token launches"],
+        "tokens": ["COMP", "YFI", "UNI", "AAVE", "SNX", "CRV"]
+      },
+      "phase_sequence": ["accumulation", "bull"],
+      "sources": []
+    },
+    "2021_bull": {
+      "label": "Full Cycle",
+      "time_boundaries": {"start": "2021-01", "end": "2022-11"},
+      "key_events": [
+        {"date": "2021-01-01", "event": "BTC starts year at ~$29,000; institutional accumulation underway"},
+        {"date": "2021-02-08", "event": "Tesla announces $1.5B BTC purchase; corporate treasury trend"},
+        {"date": "2021-04-14", "event": "Coinbase direct listing on NASDAQ"},
+        {"date": "2021-05-19", "event": "China mining ban triggers 50% BTC correction"},
+        {"date": "2021-09-07", "event": "El Salvador adopts BTC as legal tender"},
+        {"date": "2021-11-10", "event": "BTC all-time high ~$69,000; ETH peaks ~$4,800"},
+        {"date": "2022-05-09", "event": "Terra/LUNA collapse — $40B wiped in 72 hours"},
+        {"date": "2022-11-08", "event": "FTX collapse — $8B customer funds missing"}
+      ],
+      "macro_context": "Fed began hiking cycle in March 2022 (0.25% → 4.5% by end 2022); M2 growth peaked then reversed; DXY strengthened sharply 2022; risk assets repriced as liquidity tightened.",
+      "tracked_variables": {
+        "macro": ["Fed rate hike cycle start", "M2 growth reversal", "DXY strengthening", "Fed balance sheet peak"],
+        "bitcoin": ["MVRV-Z overvalued signal Nov 2021", "Exchange inflows distribution", "SOPR profit-taking peak"],
+        "sectors": ["NFT market volume", "L2 TVL growth", "Metaverse land sales", "CeFi yield products"],
+        "tokens": ["SOL", "AVAX", "LUNA", "FTT", "MATIC", "APE"]
+      },
+      "phase_sequence": ["bull", "peak", "bear"],
+      "sources": []
+    },
+    "2022_bear": {
+      "label": "Bear Market",
+      "time_boundaries": {"start": "2021-11", "end": "2023-01"},
+      "key_events": [
+        {"date": "2021-11-10", "event": "BTC all-time high ~$69,000 — cycle peak"},
+        {"date": "2022-03-16", "event": "Fed first rate hike of cycle (+25bps)"},
+        {"date": "2022-06-13", "event": "BTC breaks below $20,000; Celsius Network halts withdrawals"},
+        {"date": "2022-09-15", "event": "Ethereum Merge — PoS transition"},
+        {"date": "2022-11-08", "event": "FTX collapse accelerates bear capitulation"},
+        {"date": "2022-12-28", "event": "BTC year-end ~$16,500 — bear market low"},
+        {"date": "2023-01-12", "event": "BTC recovery begins; market stabilises above $17,000"}
+      ],
+      "macro_context": "Fastest Fed tightening cycle in 40 years (0.25% → 5.25%); M2 contracted YoY for first time since 1930s; DXY hit 20-year high (114) in Sep 2022; real yields positive for first time since 2019.",
+      "tracked_variables": {
+        "macro": ["Fed rate hike pace", "Real yield turning positive", "DXY 20-year high", "M2 contraction"],
+        "bitcoin": ["MVRV-Z deep undervalue", "Exchange outflows accumulation phase", "SOPR below 1 capitulation"],
+        "sectors": ["CeFi contagion spread", "DeFi TVL drawdown", "Stablecoin de-peg events"],
+        "tokens": ["LUNA", "FTT", "CEL", "LIDO", "GMX"]
+      },
+      "phase_sequence": ["peak", "bear", "accumulation"],
+      "sources": []
+    },
+    "2024_halving": {
+      "label": "Current Cycle",
+      "time_boundaries": {"start": "2024-01", "end": null},
+      "key_events": [
+        {"date": "2024-01-10", "event": "SEC approves spot Bitcoin ETFs — BlackRock, Fidelity, ARK"},
+        {"date": "2024-01-11", "event": "Spot BTC ETF trading begins; $4.6B first-day volume"},
+        {"date": "2024-04-19", "event": "Bitcoin fourth halving (block reward 6.25 → 3.125 BTC)"},
+        {"date": "2024-05-23", "event": "SEC approves spot Ethereum ETFs"},
+        {"date": "2024-07-23", "event": "Spot ETH ETF trading begins"},
+        {"date": "2024-11-05", "event": "US presidential election — crypto-friendly outcome"},
+        {"date": "2025-01-20", "event": "Strategic Bitcoin Reserve executive order signed"}
+      ],
+      "macro_context": "Fed began cutting rates Sep 2024 (5.25% → 4.25% by end 2024); M2 recovering; DXY elevated but trending lower; institutional demand via ETFs adding structural bid to BTC.",
+      "tracked_variables": {
+        "macro": ["Fed rate cut cycle", "M2 recovery trajectory", "DXY trend", "ETF inflow rate"],
+        "bitcoin": ["Halving supply shock (Apr 2024)", "ETF net inflows daily", "MVRV-Z current vs prior peaks", "Exchange balance declining"],
+        "sectors": ["RWA tokenization TVL", "AI/Compute token launches", "L2 DA market share", "Institutional ETF products"],
+        "tokens": ["BTC", "ETH", "SOL", "ONDO", "WLD", "ENA"]
+      },
+      "phase_sequence": ["accumulation", "bull", "peak"],
+      "sources": []
+    }
+  },
+  "categories": {
+    "macro": {
+      "label": "Macro / Liquidity",
+      "description": "Federal Reserve policy, money supply, dollar index, global liquidity.",
+      "sources": [
+        {
+          "label": "FRED: Federal Funds Effective Rate",
+          "url": "https://fred.stlouisfed.org/series/FEDFUNDS",
+          "category": "macro",
+          "cycle_tags": ["2017_bull", "2020_defi", "2021_bull", "2022_bear", "2024_halving"],
+          "why_included": "Primary macro signal: Fed rate direction (hiking/holding/cutting) drives risk-asset regimes across all crypto cycles.",
+          "quality": 5,
+          "type": "data",
+          "fetchable": true
+        },
+        {
+          "label": "FRED: M2 Money Supply (seasonally adjusted)",
+          "url": "https://fred.stlouisfed.org/series/M2SL",
+          "category": "macro",
+          "cycle_tags": ["2020_defi", "2021_bull", "2022_bear", "2024_halving"],
+          "why_included": "M2 YoY growth correlates strongly with crypto bull runs; M2 contraction preceded 2022 bear market.",
+          "quality": 5,
+          "type": "data",
+          "fetchable": true
+        },
+        {
+          "label": "FRED: Fed Balance Sheet Assets (WALCL)",
+          "url": "https://fred.stlouisfed.org/series/WALCL",
+          "category": "macro",
+          "cycle_tags": ["2020_defi", "2021_bull", "2022_bear", "2024_halving"],
+          "why_included": "Fed balance sheet expansion (QE) pumped $3T in 2020, fuelling DeFi Summer; trajectory signals macro tailwind/headwind.",
+          "quality": 5,
+          "type": "data",
+          "fetchable": true
+        },
+        {
+          "label": "FRED: Trade Weighted US Dollar Index (DTWEXBGS)",
+          "url": "https://fred.stlouisfed.org/series/DTWEXBGS",
+          "category": "macro",
+          "cycle_tags": ["2017_bull", "2020_defi", "2021_bull", "2022_bear", "2024_halving"],
+          "why_included": "DXY proxy: strong dollar (2022) correlates with crypto drawdowns; weak dollar supports risk assets.",
+          "quality": 5,
+          "type": "data",
+          "fetchable": true
+        },
+        {
+          "label": "IMF World Economic Outlook database",
+          "url": "https://www.imf.org/en/Publications/WEO",
+          "category": "macro",
+          "cycle_tags": ["2022_bear", "2024_halving"],
+          "why_included": "Global growth forecasts and inflation data contextualize macro regime changes that affect crypto risk appetite.",
+          "quality": 4,
+          "type": "research",
+          "fetchable": true
+        },
+        {
+          "label": "Fed press release: March 2022 rate hike decision",
+          "url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20220316a.htm",
+          "category": "macro",
+          "cycle_tags": ["2022_bear"],
+          "why_included": "Primary source for the start of the 2022 rate hike cycle that triggered the crypto bear market.",
+          "quality": 5,
+          "type": "news",
+          "fetchable": true
+        },
+        {
+          "label": "BIS Global Liquidity Indicators",
+          "url": "https://www.bis.org/statistics/gli.htm",
+          "category": "macro",
+          "cycle_tags": ["2020_defi", "2021_bull", "2022_bear", "2024_halving"],
+          "why_included": "Global cross-border credit and liquidity data; complements FRED for international macro picture.",
+          "quality": 4,
+          "type": "data",
+          "fetchable": true
+        },
+        {
+          "label": "BlackRock iShares Bitcoin ETF (IBIT) product page",
+          "url": "https://www.blackrock.com/us/individual/products/333011/",
+          "category": "macro",
+          "cycle_tags": ["2024_halving"],
+          "why_included": "Largest spot BTC ETF by AUM; institutional inflow data is a key driver variable for the 2024 cycle.",
+          "quality": 4,
+          "type": "data",
+          "fetchable": false
+        }
+      ]
+    },
+    "bitcoin_onchain": {
+      "label": "Bitcoin On-Chain",
+      "description": "Supply, valuation, exchange flows, halving mechanics.",
+      "sources": [
+        {
+          "label": "Bitcoin controlled supply / halving schedule",
+          "url": "https://en.bitcoin.it/wiki/Controlled_supply",
+          "category": "bitcoin_onchain",
+          "cycle_tags": ["2017_bull", "2020_defi", "2021_bull", "2024_halving"],
+          "why_included": "Definitive reference for Bitcoin's fixed supply schedule and halving epochs — foundational for supply-shock analysis.",
+          "quality": 5,
+          "type": "docs",
+          "fetchable": true
+        },
+        {
+          "label": "Glassnode: MVRV-Z Score",
+          "url": "https://studio.glassnode.com/metrics?a=BTC&m=market.MvrvZScore",
+          "category": "bitcoin_onchain",
+          "cycle_tags": ["2017_bull", "2020_defi", "2021_bull", "2022_bear", "2024_halving"],
+          "why_included": "MVRV-Z identifies cycle tops (overvalued) and bottoms (undervalued) with high historical accuracy across all BTC cycles.",
+          "quality": 5,
+          "type": "data",
+          "fetchable": false
+        },
+        {
+          "label": "Glassnode: Exchange Net Position Change",
+          "url": "https://studio.glassnode.com/metrics?a=BTC&m=distribution.BalanceExchangesNetChange",
+          "category": "bitcoin_onchain",
+          "cycle_tags": ["2020_defi", "2021_bull", "2022_bear", "2024_halving"],
+          "why_included": "Exchange net inflows signal distribution (selling pressure); outflows signal accumulation — critical cycle timing indicator.",
+          "quality": 5,
+          "type": "data",
+          "fetchable": false
+        },
+        {
+          "label": "CoinMetrics: SOPR (Spent Output Profit Ratio)",
+          "url": "https://coinmetrics.io/sopr/",
+          "category": "bitcoin_onchain",
+          "cycle_tags": ["2021_bull", "2022_bear", "2024_halving"],
+          "why_included": "SOPR below 1 signals capitulation (bear confirmation); above 1 persistently signals bull trend continuation.",
+          "quality": 4,
+          "type": "data",
+          "fetchable": true
+        },
+        {
+          "label": "Investopedia: Bitcoin halving explained",
+          "url": "https://www.investopedia.com/bitcoin-halving-4843769",
+          "category": "bitcoin_onchain",
+          "cycle_tags": ["2017_bull", "2020_defi", "2024_halving"],
+          "why_included": "Accessible explanation of halving mechanics and historical price impact for evidence-pack context.",
+          "quality": 3,
+          "type": "article",
+          "fetchable": true
+        },
+        {
+          "label": "CaseBitcoin: Stock-to-Flow model",
+          "url": "https://casebitcoin.com/",
+          "category": "bitcoin_onchain",
+          "cycle_tags": ["2020_defi", "2021_bull", "2024_halving"],
+          "why_included": "S2F model links Bitcoin's halving-driven scarcity to price cycles; useful historical framing even if model has limitations.",
+          "quality": 3,
+          "type": "research",
+          "fetchable": true
+        },
+        {
+          "label": "LookIntoBitcoin: Pi Cycle Top Indicator",
+          "url": "https://www.lookintobitcoin.com/charts/pi-cycle-top-indicator/",
+          "category": "bitcoin_onchain",
+          "cycle_tags": ["2017_bull", "2021_bull"],
+          "why_included": "Pi Cycle indicator has called BTC cycle tops within 3 days historically; useful for peak identification analysis.",
+          "quality": 4,
+          "type": "data",
+          "fetchable": false
+        },
+        {
+          "label": "River Financial: 2024 Bitcoin halving analysis",
+          "url": "https://river.com/learn/bitcoin-halving/",
+          "category": "bitcoin_onchain",
+          "cycle_tags": ["2024_halving"],
+          "why_included": "Detailed institutional-grade analysis of 2024 halving supply dynamics and projected demand from spot ETFs.",
+          "quality": 4,
+          "type": "article",
+          "fetchable": true
+        }
+      ]
+    },
+    "sector_analysis": {
+      "label": "Sector Analysis",
+      "description": "DeFi, NFTs, L2, ETH upgrades, TVL trends, sector rotation.",
+      "sources": [
+        {
+          "label": "Ethereum history timeline",
+          "url": "https://ethereum.org/en/history/",
+          "category": "sector_analysis",
+          "cycle_tags": ["2017_bull", "2020_defi", "2021_bull", "2022_bear", "2024_halving"],
+          "why_included": "Canonical timeline of Ethereum upgrades; maps protocol milestones to cycle phases across all cycles.",
+          "quality": 5,
+          "type": "docs",
+          "fetchable": true
+        },
+        {
+          "label": "DeFiLlama: TVL charts by chain",
+          "url": "https://defillama.com/chains",
+          "category": "sector_analysis",
+          "cycle_tags": ["2020_defi", "2021_bull", "2022_bear", "2024_halving"],
+          "why_included": "Aggregated TVL data across chains; TVL growth rate per chain is a leading sector indicator for capital rotation.",
+          "quality": 5,
+          "type": "data",
+          "fetchable": false
+        },
+        {
+          "label": "The Block: DeFi 2020 year-in-review",
+          "url": "https://www.theblock.co/post/90334/defi-2020-year-review",
+          "category": "sector_analysis",
+          "cycle_tags": ["2020_defi"],
+          "why_included": "Comprehensive data-backed review of DeFi Summer 2020: TVL growth, DEX volumes, governance token launches.",
+          "quality": 4,
+          "type": "research",
+          "fetchable": true
+        },
+        {
+          "label": "Messari: 2021 Crypto Theses",
+          "url": "https://messari.io/report/crypto-theses-for-2021",
+          "category": "sector_analysis",
+          "cycle_tags": ["2021_bull"],
+          "why_included": "Industry-leading annual research framing 2021 sector narratives: NFTs, L1 wars, DeFi 2.0, institutional adoption.",
+          "quality": 5,
+          "type": "research",
+          "fetchable": false
+        },
+        {
+          "label": "Ethereum roadmap: The Merge",
+          "url": "https://ethereum.org/en/roadmap/merge/",
+          "category": "sector_analysis",
+          "cycle_tags": ["2022_bear"],
+          "why_included": "ETH PoS transition in Sep 2022 — structural change reducing sell pressure, key narrative for 2022-2024 ETH thesis.",
+          "quality": 5,
+          "type": "docs",
+          "fetchable": true
+        },
+        {
+          "label": "Ethereum roadmap: Dencun upgrade",
+          "url": "https://ethereum.org/en/roadmap/dencun/",
+          "category": "sector_analysis",
+          "cycle_tags": ["2024_halving"],
+          "why_included": "Dencun (EIP-4844) reduced L2 fees by 10-100x; key driver of L2 adoption narrative in 2024 cycle.",
+          "quality": 5,
+          "type": "docs",
+          "fetchable": true
+        },
+        {
+          "label": "CoinGecko: 2024 Annual Crypto Report",
+          "url": "https://www.coingecko.com/research/publications/2024-annual-crypto-report",
+          "category": "sector_analysis",
+          "cycle_tags": ["2024_halving"],
+          "why_included": "Comprehensive 2024 market data: sector performance, DEX volumes, stablecoin growth, AI token launches.",
+          "quality": 4,
+          "type": "research",
+          "fetchable": null
+        }
+      ]
+    },
+    "token_case_studies": {
+      "label": "Token Case Studies",
+      "description": "Individual token histories illustrating growth types and cycle dynamics.",
+      "sources": [
+        {
+          "label": "Uniswap: Introducing UNI governance token",
+          "url": "https://blog.uniswap.org/uni",
+          "category": "token_case_studies",
+          "cycle_tags": ["2020_defi"],
+          "why_included": "UNI retroactive airdrop (Sep 2020) is the canonical 'sustained' DeFi token case: fundamental protocol backing, governance utility.",
+          "quality": 5,
+          "type": "blog",
+          "fetchable": true
+        },
+        {
+          "label": "Binance: BNB Smart Chain mainnet announcement",
+          "url": "https://www.binance.com/en/blog/all/421499824684900933",
+          "category": "token_case_studies",
+          "cycle_tags": ["2020_defi", "2021_bull"],
+          "why_included": "BSC launch created high-throughput EVM chain; BNB 2020-21 growth illustrates exchange-token/ecosystem flywheel dynamics.",
+          "quality": 4,
+          "type": "blog",
+          "fetchable": true
+        },
+        {
+          "label": "ERC-20 token standard documentation",
+          "url": "https://ethereum.org/en/developers/docs/standards/tokens/erc-20/",
+          "category": "token_case_studies",
+          "cycle_tags": ["2017_bull", "2020_defi"],
+          "why_included": "ERC-20 standard enabled the ICO boom (2017) and DeFi token issuance (2020); foundational for token growth analysis.",
+          "quality": 5,
+          "type": "docs",
+          "fetchable": true
+        },
+        {
+          "label": "Terra/LUNA collapse post-mortem (Agora Terra)",
+          "url": "https://agora.terra.money/t/terra-ecosystem-revival-plan/8701",
+          "category": "token_case_studies",
+          "cycle_tags": ["2021_bull", "2022_bear"],
+          "why_included": "LUNA is the definitive 'quick spike then total collapse' case: algorithmic stablecoin failure, $40B wiped, systemic contagion.",
+          "quality": 5,
+          "type": "research",
+          "fetchable": true
+        },
+        {
+          "label": "Ethereum blog: Dencun mainnet announcement",
+          "url": "https://blog.ethereum.org/2024/02/27/dencun-mainnet-announcement",
+          "category": "token_case_studies",
+          "cycle_tags": ["2024_halving"],
+          "why_included": "Dencun upgrade directly benefited L2 tokens (ARB, OP, STRK); case study for upgrade-driven sector token growth.",
+          "quality": 5,
+          "type": "blog",
+          "fetchable": true
+        }
+      ]
+    }
+  }
 }
