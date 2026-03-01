@@ -103,6 +103,50 @@ SECTOR_TAXONOMY = [
     "Other/Unknown",
 ]
 
+SECTOR_KEYWORDS: dict[str, list[str]] = {
+    "AI/Compute":            ["ai", "artificial intelligence", "gpu", "compute", "inference",
+                              "agent", "llm", "neural", "machine learning"],
+    "DePIN":                 ["depin", "physical infrastructure", "iot", "wireless", "hotspot",
+                              "sensor", "helium", "hivemapper"],
+    "RWA/Tokenization":      ["rwa", "real world asset", "tokenize", "tokenization",
+                              "treasury", "bond", "real estate", "commodity"],
+    "L2/DA/Modular":         ["layer2", "l2", "rollup", "zk", "optimistic", "data availability",
+                              "modular", "celestia", "eigenlayer", "arbitrum", "starknet"],
+    "Interop/Messaging":     ["bridge", "cross-chain", "interop", "messaging", "ibc",
+                              "wormhole", "layerzero", "axelar"],
+    "Security/Tooling":      ["audit", "security", "tooling", "sdk", "dev tool", "wallet",
+                              "multisig", "exploit", "vulnerability", "hack"],
+    "DeFi (Revenue-driven)": ["defi", "dex", "amm", "lending", "yield", "tvl", "revenue",
+                              "liquidity", "swap", "governance", "staking", "aave", "uniswap"],
+    "Institutional/ETFs":    ["etf", "institutional", "blackrock", "grayscale", "fidelity",
+                              "custody", "regulated", "asset manager"],
+    "Regulation/Policy":     ["sec", "regulation", "policy", "compliance", "cftc", "mica",
+                              "legislation", "congress", "enforcement", "ban"],
+    "Macro/Liquidity":       ["macro", "liquidity", "fed", "interest rate", "inflation",
+                              "recession", "dollar", "monetary", "rate hike", "rate cut"],
+}
+
+def tag_post_sectors(post: dict) -> list[str]:
+    txt = " ".join([
+        post.get("title", "") or "",
+        post.get("summary", "") or "",
+        post.get("selftext", "") or "",
+    ]).lower()
+    return [s for s, kws in SECTOR_KEYWORDS.items() if any(kw in txt for kw in kws)]
+
+def filter_no_sector(items: list[dict]) -> tuple[list[dict], dict]:
+    from collections import Counter
+    kept, discarded, per_sector = [], 0, Counter()
+    for it in items:
+        sectors = tag_post_sectors(it)
+        if sectors:
+            it["_matched_sectors"] = sectors
+            per_sector.update(sectors)
+            kept.append(it)
+        else:
+            discarded += 1
+    return kept, {"discarded": discarded, "kept_per_sector": dict(per_sector)}
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # PROMPTS — one per job so each call has a tight, clear contract
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -352,17 +396,24 @@ def resolve_phase_subreddits(phase: str | None, cycle_data: dict,
 
 
 def load_subreddits_from_config(cfg: dict, use_discovery: bool = False) -> list[dict]:
-    """Return effective subreddit list. use_discovery=False → backward-compat (cfg["subreddits"]).
-    use_discovery=True → merge baseline + discovery, deduped by name."""
+    """Return effective subreddit list.
+    use_discovery=False → core_subreddits → baseline_subreddits → subreddits, apply exclude filter.
+    use_discovery=True → merge core + discovery, deduped by name, apply exclude filter."""
+    exclude = {e["name"].lower() for e in cfg.get("exclude_subreddits", [])}
     if not use_discovery:
-        return cfg.get("subreddits", [])
-    baseline  = cfg.get("baseline_subreddits", cfg.get("subreddits", []))
+        pool = (cfg.get("core_subreddits")
+                or cfg.get("baseline_subreddits")
+                or cfg.get("subreddits", []))
+        return [s for s in pool if s.get("name", "").lower() not in exclude]
+    baseline  = (cfg.get("core_subreddits")
+                 or cfg.get("baseline_subreddits")
+                 or cfg.get("subreddits", []))
     discovery = cfg.get("discovery_subreddits", [])
     seen: set[str] = set()
     merged: list[dict] = []
     for s in baseline + discovery:
         key = s.get("name", "").lower()
-        if key and key not in seen:
+        if key and key not in seen and key not in exclude:
             seen.add(key)
             merged.append(s)
     return merged
@@ -797,7 +848,7 @@ def generate_subreddit_proposals(llm_proposals: list[dict], cfg: dict) -> dict:
     """Post-process LLM subreddit proposals. Output only — does NOT modify config.json."""
     current = {
         s["name"].lower()
-        for pool in ("baseline_subreddits", "discovery_subreddits", "subreddits")
+        for pool in ("core_subreddits", "baseline_subreddits", "discovery_subreddits", "subreddits")
         for s in cfg.get(pool, [])
     }
     result: dict = {
@@ -1425,6 +1476,12 @@ def main():
 
         cfg         = json.load(open("config.json", "r", encoding="utf-8"))
 
+        # Apply limits from config
+        limits = cfg.get("limits", {})
+        if limits.get("max_posts_per_subreddit"):
+            cfg["max_items_per_feed"] = limits["max_posts_per_subreddit"]
+        cfg["_max_total_posts"] = limits.get("max_total_posts", 150)
+
         # Discovery layer setup
         use_disc = getattr(args, "discovery", False) and args.run_mode == "TOKEN_SHORTLIST"
         cfg["subreddits"] = load_subreddits_from_config(cfg, use_discovery=use_disc)
@@ -1491,6 +1548,12 @@ def main():
             trimmed = filter_memes(trimmed)
             log("INFO", f"Meme filter: {before} → {len(trimmed)} items")
             log_step(_RUN_LOG_PATH, "meme_filter", before=before, kept=len(trimmed))
+
+        # Sector pre-filter
+        trimmed, sector_stats = filter_no_sector(trimmed)
+        log("INFO", f"Sector pre-filter: {sector_stats['discarded']} discarded, "
+                    f"kept per sector: {sector_stats['kept_per_sector']}")
+        log_step(_RUN_LOG_PATH, "sector_prefilter", **sector_stats)
 
         # Token candidates
         token_candidates  = extract_token_candidates(trimmed)
