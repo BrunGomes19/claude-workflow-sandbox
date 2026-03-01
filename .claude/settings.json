@@ -1,0 +1,27 @@
+{
+  "defaultMode": "acceptEdits",
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.secrets/**)",
+      "Bash(curl *)",
+      "Bash(wget *)"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Bash(git pull *)",
+      "Bash(pip install *)"
+    ],
+    "allow": [
+      "Bash(pwd)",
+      "Bash(ls *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git branch*)",
+      "Bash(git log*)",
+      "Bash(git worktree*)",
+      "Bash(python --version)",
+      "Bash(python -c *)"
+    ]
+  }
+}
