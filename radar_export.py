@@ -1319,17 +1319,22 @@ def notion_export(db_id: str, token: str, title: str, props: dict,
     notion    = NotionClient(auth=token)
     json_blob = json.dumps(data, ensure_ascii=False)
 
+    properties = {
+        "Name":       {"title": [{"text": {"content": title}}]},
+        "RunDate":    {"date":  {"start": props["run_date"]}},
+        "RunMode":    {"select": {"name": props["run_mode"]}},
+        "TimeWindow": {"rich_text": [{"text": {"content": props["time_window"]}}]},
+        "TopSectors": {"rich_text": [{"text": {"content": props["top_sectors"]}}]},
+        "Confidence": {"select": {"name": props["confidence"]}},
+        "JsonBlob":   {"rich_text": [{"text": {"content": json_blob[:2000]}}]},
+    }
+    if "posts_analyzed" in props:
+        properties["PostsAnalyzed"]   = {"rich_text": [{"text": {"content": str(props["posts_analyzed"])}}]}
+        properties["SectorCount"]     = {"rich_text": [{"text": {"content": str(props["sector_count"])}}]}
+        properties["DiscoveryItems"]  = {"rich_text": [{"text": {"content": str(props["discovery_items"])}}]}
     page = notion.pages.create(
         parent={"database_id": db_id},
-        properties={
-            "Name":       {"title": [{"text": {"content": title}}]},
-            "RunDate":    {"date":  {"start": props["run_date"]}},
-            "RunMode":    {"select": {"name": props["run_mode"]}},
-            "TimeWindow": {"rich_text": [{"text": {"content": props["time_window"]}}]},
-            "TopSectors": {"rich_text": [{"text": {"content": props["top_sectors"]}}]},
-            "Confidence": {"select": {"name": props["confidence"]}},
-            "JsonBlob":   {"rich_text": [{"text": {"content": json_blob[:2000]}}]},
-        },
+        properties=properties,
     )
     page_id = page["id"]
 
@@ -1688,11 +1693,17 @@ def main():
     gen_at = data["meta"]["generated_at"]
     tw     = data["meta"]["time_window"]
 
+    # Guards for CYCLE_MAP_BUILD (no sector_stats / trimmed / confidence_scores)
+    _sector_stats = sector_stats if args.run_mode != "CYCLE_MAP_BUILD" else {}
+    _trimmed      = trimmed      if args.run_mode != "CYCLE_MAP_BUILD" else []
+    _conf_scores  = confidence_scores if args.run_mode == "TOKEN_SHORTLIST" else {}
+
     sector_rows = []
     for s in data.get("sectors", [])[:6]:
+        sec_name = s.get("sector", "")
         sector_rows.append([
             run_id, gen_at, tw,
-            s.get("sector", ""),
+            sec_name,
             s.get("score", 0),
             s.get("confidence", "Low"),
             s.get("status", "Speculative"),
@@ -1701,14 +1712,19 @@ def main():
             "; ".join(s.get("against", [])[:5]),
             "; ".join(s.get("invalidations", [])[:5]),
             ", ".join(s.get("top_entities", [])[:10]),
+            len({it["subreddit"] for it in _trimmed
+                 if sec_name in it.get("_matched_sectors", [])}),
+            len(_trimmed),
+            _sector_stats.get("kept_per_sector", {}).get(sec_name, 0),
         ])
 
     token_rows = []
     for t in data.get("tokens", [])[:10]:
+        sym = t.get("symbol", "")
         token_rows.append([
             run_id, gen_at,
             t.get("sector", ""),
-            t.get("symbol", ""),
+            sym,
             t.get("name", "Unknown"),
             t.get("chain", "Unknown"),
             t.get("spike_score", 0),
@@ -1718,6 +1734,10 @@ def main():
             t.get("thesis", ""),
             "; ".join(t.get("catalysts", [])[:5]),
             "; ".join(t.get("invalidations", [])[:5]),
+            gen_at[:10],
+            ", ".join(_conf_scores.get(sym, {}).get("discovery_sources", [])),
+            _conf_scores.get(sym, {}).get("mentions", 0),
+            "reddit+discovery" if _conf_scores.get(sym, {}).get("discovery_count") else "reddit",
         ])
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -1766,11 +1786,14 @@ def main():
         token=os.getenv("NOTION_TOKEN"),
         title=f"{args.run_mode} – {now.strftime('%Y-%m-%d')}",
         props={
-            "run_date":    now.date().isoformat(),
-            "run_mode":    args.run_mode,
-            "time_window": tw,
-            "top_sectors": top_sectors[:200],
-            "confidence":  confidence,
+            "run_date":       now.date().isoformat(),
+            "run_mode":       args.run_mode,
+            "time_window":    tw,
+            "top_sectors":    top_sectors[:200],
+            "confidence":     confidence,
+            "posts_analyzed": len(_trimmed),
+            "sector_count":   len(data.get("sectors", [])),
+            "discovery_items": len(discovery_items) if args.run_mode != "CYCLE_MAP_BUILD" else 0,
         },
         md=md,
         data=data,
