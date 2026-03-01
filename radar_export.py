@@ -232,6 +232,21 @@ def rss_url(subreddit: str, feed: str) -> str:
     return f"https://www.reddit.com/r/{subreddit}/{feed}/.rss?sort={feed}"
 
 
+def resolve_cycle_phase(args, cfg: dict) -> str | None:
+    """Return the active cycle phase: CLI arg > config.json > None."""
+    if getattr(args, "cycle_phase", None):
+        return args.cycle_phase
+    return cfg.get("cycle_phase") or None
+
+
+def resolve_phase_subreddits(phase: str | None, cycle_data: dict,
+                              fallback_subreddits: list) -> list:
+    """Return subreddits for the given phase, or fallback_subreddits if phase is None."""
+    if not phase:
+        return fallback_subreddits
+    return cycle_data.get("phases", {}).get(phase, {}).get("subreddits", fallback_subreddits)
+
+
 def parse_entry_time(entry) -> datetime | None:
     t = getattr(entry, "published_parsed", None) or getattr(entry, "updated_parsed", None)
     if not t:
@@ -592,7 +607,11 @@ def build_cycle_evidence(sources_path: str, cache_path: str,
             "Create it using the cycle_sources.json template provided."
         )
 
-    sources = json.load(open(sources_path, "r", encoding="utf-8"))
+    raw = json.load(open(sources_path, "r", encoding="utf-8"))
+    if isinstance(raw, list):                        # legacy flat array
+        sources = raw
+    else:                                            # new phase-keyed schema
+        sources = raw.get("legacy_cycle_evidence", [])
     out = []
 
     for s in sources:
@@ -903,6 +922,10 @@ def main():
                     help="Path to cycle fetch cache")
     ap.add_argument("--refresh-cycle-sources", action="store_true",
                     help="Force re-fetch all cycle sources (ignore cache)")
+    ap.add_argument("--cycle-phase",
+                    choices=["accumulation", "bull", "peak", "bear", "recovery"],
+                    default=None,
+                    help="Override market cycle phase for source selection")
     args = ap.parse_args()
 
     now    = datetime.now(tz)
@@ -960,6 +983,17 @@ def main():
         log("INFO", f"Window: {time_window} | Since: {since_utc.strftime('%Y-%m-%d %H:%M UTC')}")
 
         cfg         = json.load(open("config.json", "r", encoding="utf-8"))
+
+        # Load cycle sources for phase-aware subreddit selection
+        _raw_cs = json.load(open(args.cycle_sources, "r", encoding="utf-8")) \
+                  if os.path.exists(args.cycle_sources) else []
+        cycle_data = _raw_cs if isinstance(_raw_cs, dict) else {"phases": {}, "legacy_cycle_evidence": _raw_cs}
+
+        phase = resolve_cycle_phase(args, cfg)
+        cfg   = {**cfg, "subreddits": resolve_phase_subreddits(phase, cycle_data, cfg["subreddits"])}
+        if phase:
+            log("INFO", f"Cycle phase: {phase} → using phase subreddits")
+
         ledger_path = os.getenv("LEDGER_PATH", "trend_ledger.jsonl")
 
         purge_old_ledger(ledger_path, keep_hours=72)
