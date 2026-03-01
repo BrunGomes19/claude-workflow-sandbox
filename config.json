@@ -1,140 +1,52 @@
 {
   "subreddits": [
-    {
-      "name": "CryptoTechnology",
-      "feeds": [
-        "rising",
-        "new"
-      ]
-    },
-    {
-      "name": "CryptoMarkets",
-      "feeds": [
-        "rising",
-        "new"
-      ]
-    },
-    {
-      "name": "defi",
-      "feeds": [
-        "rising",
-        "new"
-      ]
-    },
-    {
-      "name": "ethfinance",
-      "feeds": [
-        "rising",
-        "new"
-      ]
-    },
-    {
-      "name": "CryptoCurrency",
-      "feeds": [
-        "rising",
-        "new"
-      ]
-    },
-    {
-      "name": "ethdev",
-      "feeds": [
-        "new"
-      ]
-    },
-    {
-      "name": "ethstaker",
-      "feeds": [
-        "new"
-      ]
-    },
-    {
-      "name": "ethereum",
-      "feeds": [
-        "rising",
-        "new"
-      ]
-    },
-    {
-      "name": "layer2",
-      "feeds": [
-        "new"
-      ]
-    },
-    {
-      "name": "Arbitrum",
-      "feeds": [
-        "rising",
-        "new"
-      ]
-    },
-    {
-      "name": "StarknetCrypto",
-      "feeds": [
-        "new"
-      ]
-    },
-    {
-      "name": "CelestiaNetwork",
-      "feeds": [
-        "new"
-      ]
-    },
-    {
-      "name": "RWA",
-      "feeds": [
-        "rising",
-        "new"
-      ]
-    },
-    {
-      "name": "Tokenization",
-      "feeds": [
-        "rising",
-        "new"
-      ]
-    },
-    {
-      "name": "depin",
-      "feeds": [
-        "rising",
-        "new"
-      ]
-    },
-    {
-      "name": "solana",
-      "feeds": [
-        "rising",
-        "new"
-      ]
-    },
-    {
-      "name": "Avax",
-      "feeds": [
-        "rising",
-        "new"
-      ]
-    },
-    {
-      "name": "cosmosnetwork",
-      "feeds": [
-        "rising",
-        "new"
-      ]
-    },
-    {
-      "name": "Polkadot",
-      "feeds": [
-        "rising",
-        "new"
-      ]
-    },
-    {
-      "name": "sui",
-      "feeds": [
-        "rising",
-        "new"
-      ]
-    }
+    { "name": "CryptoTechnology",            "feeds": ["rising", "new"] },
+    { "name": "CryptoMarkets",               "feeds": ["rising", "new"] },
+    { "name": "defi",                        "feeds": ["rising", "new"] },
+    { "name": "ethfinance",                  "feeds": ["rising", "new"] },
+    { "name": "CryptoCurrency",              "feeds": ["rising", "new"] },
+    { "name": "ethdev",                      "feeds": ["new"] },
+    { "name": "ethstaker",                   "feeds": ["new"] },
+    { "name": "ethereum",                    "feeds": ["rising", "new"] },
+    { "name": "layer2",                      "feeds": ["new"] },
+    { "name": "Arbitrum",                    "feeds": ["rising", "new"] },
+    { "name": "StarknetCrypto",              "feeds": ["new"] },
+    { "name": "CelestiaNetwork",             "feeds": ["new"] },
+    { "name": "RWA",                         "feeds": ["rising", "new"] },
+    { "name": "Tokenization",                "feeds": ["rising", "new"] },
+    { "name": "depin",                       "feeds": ["rising", "new"] },
+    { "name": "solana",                      "feeds": ["rising", "new"] },
+    { "name": "Avax",                        "feeds": ["rising", "new"] },
+    { "name": "cosmosnetwork",               "feeds": ["rising", "new"] },
+    { "name": "Polkadot",                    "feeds": ["rising", "new"] },
+    { "name": "sui",                         "feeds": ["rising", "new"] }
+  ],
+  "baseline_subreddits": [
+    { "name": "CryptoTechnology",            "feeds": ["rising", "new"] },
+    { "name": "CryptoMarkets",               "feeds": ["rising", "new"] },
+    { "name": "defi",                        "feeds": ["rising", "new"] },
+    { "name": "ethfinance",                  "feeds": ["rising", "new"] },
+    { "name": "CryptoCurrency",              "feeds": ["rising", "new"] },
+    { "name": "ethdev",                      "feeds": ["new"] },
+    { "name": "ethstaker",                   "feeds": ["new"] },
+    { "name": "ethereum",                    "feeds": ["rising", "new"] },
+    { "name": "layer2",                      "feeds": ["new"] },
+    { "name": "Arbitrum",                    "feeds": ["rising", "new"] },
+    { "name": "StarknetCrypto",              "feeds": ["new"] },
+    { "name": "CelestiaNetwork",             "feeds": ["new"] },
+    { "name": "RWA",                         "feeds": ["rising", "new"] },
+    { "name": "Tokenization",                "feeds": ["rising", "new"] },
+    { "name": "depin",                       "feeds": ["rising", "new"] },
+    { "name": "solana",                      "feeds": ["rising", "new"] },
+    { "name": "Avax",                        "feeds": ["rising", "new"] },
+    { "name": "cosmosnetwork",               "feeds": ["rising", "new"] },
+    { "name": "Polkadot",                    "feeds": ["rising", "new"] },
+    { "name": "sui",                         "feeds": ["rising", "new"] }
+  ],
+  "discovery_subreddits": [
+    { "name": "ZeroXProtocol",                "feeds": ["new"] },
+    { "name": "ArtificialIntelligenceCrypto", "feeds": ["rising", "new"] },
+    { "name": "HyperliquidTrading",           "feeds": ["rising", "new"] }
   ],
   "max_items_per_feed": 25
 }
