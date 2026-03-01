@@ -51,6 +51,40 @@ def write_pending_issue(*, run_id, run_mode, component, error_type,
     with open(str(path), "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
+
+def fetch_with_retry(url, headers, timeout=30, max_retries=2,
+                     *, run_id="", run_mode="", component="http_fetch"):
+    backoff = [2, 5]
+    for attempt in range(max_retries + 1):
+        try:
+            r = requests.get(url, headers=headers, timeout=timeout)
+            if r.status_code == 429:
+                try:
+                    wait = int(r.headers.get("Retry-After",
+                               backoff[min(attempt, len(backoff)-1)]))
+                except (ValueError, TypeError):
+                    wait = backoff[min(attempt, len(backoff)-1)]
+                log("WARN", f"429 [{component}] — waiting {wait}s")
+                time.sleep(wait)
+                continue
+            r.raise_for_status()
+            return r
+        except requests.RequestException as e:
+            if attempt < max_retries:
+                wait = backoff[min(attempt, len(backoff)-1)]
+                log("WARN", f"Attempt {attempt+1} failed [{component}]: {e} — retry in {wait}s")
+                time.sleep(wait)
+            else:
+                log("ERROR", f"Failed after {max_retries+1} attempts [{component}]: {url}")
+                if run_id:
+                    write_pending_issue(
+                        run_id=run_id, run_mode=run_mode, component=component,
+                        error_type=type(e).__name__, url=url, detail=str(e),
+                        retry_count=attempt, outcome="failed", action="check_pending_issues",
+                    )
+                raise
+    raise RuntimeError("fetch_with_retry: unreachable")
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # SECTOR TAXONOMY
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -341,7 +375,8 @@ def parse_entry_time(entry) -> datetime | None:
     return datetime.fromtimestamp(time.mktime(t), tz=timezone.utc)
 
 
-def fetch_reddit_items(cfg: dict, since_utc: datetime) -> list[dict]:
+def fetch_reddit_items(cfg: dict, since_utc: datetime,
+                       run_id: str = "", run_mode: str = "") -> list[dict]:
     items, seen = [], set()
     headers = {"User-Agent": "crypto-radar/1.0 (rss trend miner)"}
     for s in cfg["subreddits"]:
@@ -349,8 +384,9 @@ def fetch_reddit_items(cfg: dict, since_utc: datetime) -> list[dict]:
             url = rss_url(s["name"], feed)
             log("STEP", f"Fetching r/{s['name']} [{feed}] ...")
             try:
-                r = requests.get(url, headers=headers, timeout=30)
-                r.raise_for_status()
+                r = fetch_with_retry(url, headers, timeout=30,
+                                     run_id=run_id, run_mode=run_mode,
+                                     component=f"reddit/{s['name']}/{feed}")
             except requests.RequestException as e:
                 log("WARN", f"Skipping r/{s['name']} [{feed}]: {e}")
                 continue
@@ -379,7 +415,11 @@ def fetch_reddit_items(cfg: dict, since_utc: datetime) -> list[dict]:
     return items
 
 
-def fetch_discovery_rss_items(sources_path: str, max_per_feed: int = 20) -> list[dict]:
+_DISCOVERY_CACHE: dict[str, bytes] = {}
+
+
+def fetch_discovery_rss_items(sources_path: str, max_per_feed: int = 20,
+                               run_id: str = "", run_mode: str = "") -> list[dict]:
     """Parse RSS discovery sources via feedparser. Returns reddit-schema-compatible item dicts."""
     if not os.path.exists(sources_path):
         log("WARN", f"Discovery sources not found: {sources_path} — skipping")
@@ -393,9 +433,14 @@ def fetch_discovery_rss_items(sources_path: str, max_per_feed: int = 20) -> list
     for s in rss_src:
         url, label = s.get("url", ""), s.get("label", "")
         try:
-            r = requests.get(url, headers=headers, timeout=30)
-            r.raise_for_status()
-            parsed = feedparser.parse(r.text)
+            if url in _DISCOVERY_CACHE:
+                parsed = feedparser.parse(_DISCOVERY_CACHE[url])
+            else:
+                r = fetch_with_retry(url, headers, timeout=30,
+                                     run_id=run_id, run_mode=run_mode,
+                                     component=f"discovery/{label}")
+                _DISCOVERY_CACHE[url] = r.content
+                parsed = feedparser.parse(r.text)
             if parsed.bozo:
                 log("WARN", f"  Discovery RSS bozo [{label}]: {parsed.bozo_exception}")
             count  = 0
@@ -421,6 +466,12 @@ def fetch_discovery_rss_items(sources_path: str, max_per_feed: int = 20) -> list
                 })
                 count += 1
             log("INFO", f"  Discovery RSS [{label}]: {count} items")
+            if count == 0 and run_id:
+                write_pending_issue(
+                    run_id=run_id, run_mode=run_mode, component=f"discovery/{label}",
+                    error_type="ZeroItems", url=url, detail="Feed returned 0 items",
+                    retry_count=0, outcome="zero_items", action="check_pending_issues",
+                )
         except requests.RequestException as exc:
             log("WARN", f"  Discovery RSS failed [{label}]: {exc}")
         except Exception as exc:
@@ -496,8 +547,7 @@ def enrich_reddit_post(url: str, headers: dict) -> dict:
     """Fetch full post body + metadata from Reddit's free public JSON API (no auth)."""
     try:
         jurl = url.rstrip("/") + ".json?raw_json=1"
-        r = requests.get(jurl, headers=headers, timeout=20)
-        r.raise_for_status()
+        r = fetch_with_retry(jurl, headers, timeout=20, max_retries=2, component="enrich")
         post = r.json()[0]["data"]["children"][0]["data"]
         return {
             "selftext":     strip_html(post.get("selftext") or "")[:2500],
@@ -1385,6 +1435,8 @@ def main():
             discovery_items = fetch_discovery_rss_items(
                 args.discovery_sources,
                 max_per_feed=cfg.get("max_items_per_feed", 25),
+                run_id=run_id,
+                run_mode=args.run_mode,
             )
 
         # Load cycle sources for phase-aware subreddit selection
@@ -1402,7 +1454,7 @@ def main():
         purge_old_ledger(ledger_path, keep_hours=72)
 
         log("STEP", "Starting Reddit RSS fetch ...")
-        items = fetch_reddit_items(cfg, since_utc)
+        items = fetch_reddit_items(cfg, since_utc, run_id=run_id, run_mode=args.run_mode)
         log_step(_RUN_LOG_PATH, "reddit_fetch", item_count=len(items))
         append_ledger(ledger_path, run_id, items)
         ledger_recent = load_recent_ledger(ledger_path, since_utc, limit=250)
