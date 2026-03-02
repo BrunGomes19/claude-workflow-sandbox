@@ -11,15 +11,15 @@
 - Sheets + Notion schema expansion
 - Schema compliance fix (num_ctx=16384, selftext_max=400, _SCHEMA_REMINDER)
 
-## Phase 2 — In Progress
+## Phase 2 — Complete
 
 - [x] Discovery RSS layer (--discovery flag, 6 fetchable sources)
 - [x] Tier classification (investment_quality / speculative)
 - [x] Subreddit proposals (LLM suggests, human applies)
-- [ ] Cycle evidence local artifact (data/cycle_summary_latest.json)
-- [ ] Token tracking registry (config.json token_tracking wired)
-- [ ] Discovery source health monitoring (auto-flag dead feeds)
-- [ ] Google Sheets schema alignment (ensure_sheet_headers)
+- [x] Cycle evidence local artifact (data/cycle_summary_latest.json)
+- [x] Token tracking registry (config.json token_tracking wired)
+- [x] Discovery source health monitoring (auto-flag dead feeds)
+- [x] Google Sheets schema alignment (ensure_sheet_headers)
 
 ## Phase 3 — Planned
 
