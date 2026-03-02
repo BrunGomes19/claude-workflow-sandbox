@@ -66,6 +66,15 @@ def fetch_with_retry(url, headers, timeout=30, max_retries=2,
                     wait = backoff[min(attempt, len(backoff)-1)]
                 log("WARN", f"429 [{component}] — waiting {wait}s")
                 time.sleep(wait)
+                if attempt >= max_retries:
+                    log("ERROR", f"Failed after {max_retries+1} attempts (429) [{component}]: {url}")
+                    if run_id:
+                        write_pending_issue(
+                            run_id=run_id, run_mode=run_mode, component=component,
+                            error_type="RateLimited", url=url, detail="429 on final attempt",
+                            retry_count=attempt, outcome="failed", action="check_pending_issues",
+                        )
+                    raise requests.HTTPError(f"429 rate-limited after {max_retries+1} attempts: {url}")
                 continue
             r.raise_for_status()
             return r
@@ -120,7 +129,7 @@ SECTOR_KEYWORDS: dict[str, list[str]] = {
                               "liquidity", "swap", "governance", "staking", "aave", "uniswap"],
     "Institutional/ETFs":    ["etf", "institutional", "blackrock", "grayscale", "fidelity",
                               "custody", "regulated", "asset manager"],
-    "Regulation/Policy":     ["sec", "regulation", "policy", "compliance", "cftc", "mica",
+    "Regulation/Policy":     [r"\bsec\b", "regulation", "policy", "compliance", "cftc", "mica",
                               "legislation", "congress", "enforcement", "ban"],
     "Macro/Liquidity":       ["macro", "liquidity", "fed", "interest rate", "inflation",
                               "recession", "dollar", "monetary", "rate hike", "rate cut"],
@@ -132,7 +141,18 @@ def tag_post_sectors(post: dict) -> list[str]:
         post.get("summary", "") or "",
         post.get("selftext", "") or "",
     ]).lower()
-    return [s for s, kws in SECTOR_KEYWORDS.items() if any(kw in txt for kw in kws)]
+    matched = []
+    for s, kws in SECTOR_KEYWORDS.items():
+        for kw in kws:
+            if "\b" in kw:
+                if re.search(kw, txt, re.IGNORECASE):
+                    matched.append(s)
+                    break
+            else:
+                if kw in txt:
+                    matched.append(s)
+                    break
+    return matched
 
 def filter_no_sector(items: list[dict]) -> tuple[list[dict], dict]:
     from collections import Counter
@@ -1090,8 +1110,7 @@ def build_cycle_evidence(sources_path: str, cache_path: str,
             continue
 
         try:
-            r = requests.get(url, headers=headers, timeout=30)
-            r.raise_for_status()
+            r = fetch_with_retry(url, headers, timeout=30)
             snippet = strip_html(r.text)[:1500]
             item = {
                 "label":        label,
@@ -1155,11 +1174,15 @@ def extract_data_json(text: str) -> tuple[dict, str]:
 
 def clamp_scores(data: dict) -> None:
     for s in data.get("sectors", []):
+        if not isinstance(s, dict):
+            continue
         try:
             s["score"] = max(0, min(100, int(float(s.get("score", 0)))))
         except Exception:
             s["score"] = 0
     for t in data.get("tokens", []):
+        if not isinstance(t, dict):
+            continue
         try:
             t["spike_score"] = max(0, min(100, int(float(t.get("spike_score", 0)))))
         except Exception:
@@ -1179,10 +1202,14 @@ def normalize_list_fields(data: dict) -> None:
         return str(val)
 
     for s in data.get("sectors", []):
+        if not isinstance(s, dict):
+            continue
         for field in ("for", "against", "invalidations", "top_entities"):
             s[field] = [_coerce(v) for v in s.get(field, []) if v]
 
     for t in data.get("tokens", []):
+        if not isinstance(t, dict):
+            continue
         for field in ("catalysts", "traction", "tokenomics_risks",
                       "security", "liquidity", "invalidations"):
             t[field] = [_coerce(v) for v in t.get(field, []) if v]
@@ -1190,6 +1217,8 @@ def normalize_list_fields(data: dict) -> None:
 def normalize_sectors(data: dict) -> None:
     """Remap any sector not in taxonomy to Other/Unknown."""
     for s in data.get("sectors", []):
+        if not isinstance(s, dict):
+            continue
         if s.get("sector") not in SECTOR_TAXONOMY:
             log("WARN", f"  Sector '{s.get('sector')}' not in taxonomy → Other/Unknown")
             s["sector"]     = "Other/Unknown"
@@ -1197,6 +1226,8 @@ def normalize_sectors(data: dict) -> None:
             if s.get("status") == "Verified":
                 s["status"] = "Speculative"
     for t in data.get("tokens", []):
+        if not isinstance(t, dict):
+            continue
         if t.get("sector") not in SECTOR_TAXONOMY:
             t["sector"] = "Other/Unknown"
 
@@ -1207,6 +1238,8 @@ def enforce_sector_gates(data: dict) -> None:
     Downgrade (not reject) sectors with thin but non-zero evidence.
     """
     for s in data.get("sectors", []):
+        if not isinstance(s, dict):
+            continue
         has_for          = len(s.get("for", []))          >= 1
         has_against      = len(s.get("against", []))      >= 1
         has_invalidation = len(s.get("invalidations", [])) >= 1
@@ -1513,6 +1546,10 @@ def main():
                 run_id=run_id,
                 run_mode=args.run_mode,
             )
+            discovery_limit = cfg.get("limits", {}).get("discovery_limit", 5)
+            if len(discovery_items) > discovery_limit:
+                log("INFO", f"Discovery items capped: {len(discovery_items)} → {discovery_limit}")
+                discovery_items = discovery_items[:discovery_limit]
 
         # Load cycle sources for phase-aware subreddit selection
         _raw_cs = json.load(open(args.cycle_sources, "r", encoding="utf-8")) \
