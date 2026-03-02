@@ -602,6 +602,67 @@ def fetch_discovery_rss_items(sources_path: str, max_per_feed: int = 20,
     log("INFO", f"Discovery: {len(items)} items from {len(rss_src)} RSS feeds")
     return items
 
+def discovery_health_check(issues_path: str, sources_cfg_path: str) -> dict:
+    """
+    Scan pending_issues.jsonl for ZeroItems/FetchFailed events in the last 7 days
+    that match known discovery source URLs. Returns flagged sources with fail counts.
+    """
+    flagged_types = {"ZeroItems", "FetchFailed"}
+    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+
+    # Load known discovery source URLs
+    known_urls: set[str] = set()
+    try:
+        raw = json.load(open(sources_cfg_path, "r", encoding="utf-8"))
+        sources = raw.get("sources", []) if isinstance(raw, dict) else raw
+        known_urls = {s.get("url", "") for s in sources if s.get("url")}
+    except Exception:
+        pass
+
+    if not known_urls:
+        return {"flagged": []}
+
+    # Read pending issues
+    fail_counts: dict[str, list[str]] = {}  # url → [reason, ...]
+    try:
+        with open(issues_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if rec.get("error_type") not in flagged_types:
+                    continue
+                url = rec.get("url", "")
+                if url not in known_urls:
+                    continue
+                # Check timestamp (supports both "timestamp" and "ts" fields)
+                ts_raw = rec.get("timestamp") or rec.get("ts", "")
+                try:
+                    ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=timezone.utc)
+                    if ts < cutoff:
+                        continue
+                except Exception:
+                    continue
+                reason = rec.get("error_type", "Unknown")
+                fail_counts.setdefault(url, []).append(reason)
+    except FileNotFoundError:
+        pass
+    except Exception as exc:
+        log("WARN", f"discovery_health_check: error reading {issues_path}: {exc}")
+
+    flagged = [
+        {"url": url, "fail_count": len(reasons), "reason": reasons[-1]}
+        for url, reasons in fail_counts.items()
+        if len(reasons) >= 2
+    ]
+    return {"flagged": flagged}
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # LEDGER HELPERS
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1647,6 +1708,7 @@ def main():
         cfg["subreddits"] = load_subreddits_from_config(cfg, use_discovery=use_disc)
 
         discovery_items: list[dict] = []
+        _discovery_health: dict = {}
         if use_disc:
             log("STEP", "Fetching non-Reddit discovery sources ...")
             discovery_items = fetch_discovery_rss_items(
@@ -1659,6 +1721,11 @@ def main():
             if len(discovery_items) > discovery_limit:
                 log("INFO", f"Discovery items capped: {len(discovery_items)} → {discovery_limit}")
                 discovery_items = discovery_items[:discovery_limit]
+            _discovery_health = discovery_health_check(
+                "tasks/pending_issues.jsonl", args.discovery_sources
+            )
+            for _flagged in _discovery_health.get("flagged", []):
+                log("WARN", f"Discovery source degraded ({_flagged['fail_count']}x): {_flagged['url']}")
 
         # Load cycle sources for phase-aware subreddit selection
         _raw_cs = json.load(open(args.cycle_sources, "r", encoding="utf-8")) \
@@ -1846,6 +1913,17 @@ def main():
 
         _stamp_meta(data, run_id, now, args.run_mode, time_window)
 
+        # Inject discovery health into output data (TOKEN_SHORTLIST --discovery only)
+        if use_disc and _discovery_health.get("flagged"):
+            data["discovery_health"] = _discovery_health["flagged"]
+            data["discovery_proposals"] = {
+                "notice": "HUMAN REVIEW — set fetchable: false or replace URL in discovery_sources.json",
+                "exclude": [
+                    {"url": f["url"], "reason": f"Failed {f['fail_count']} times in 7 days"}
+                    for f in _discovery_health["flagged"]
+                ],
+            }
+
     # ─────────────────────────────────────────────────────────────────────────
     # BUILD EXPORT ROWS
     # ─────────────────────────────────────────────────────────────────────────
@@ -1926,6 +2004,12 @@ def main():
         print("  MARKDOWN PREVIEW")
         print("═"*60)
         print(md[:2000])
+        if data.get("discovery_health"):
+            _n_degraded = len(data["discovery_health"])
+            print(f"\n⚠ Discovery health: {_n_degraded} source(s) degraded — review discovery_sources.json")
+        if data.get("discovery_proposals"):
+            print("\n[Discovery proposals]")
+            print(json.dumps(data["discovery_proposals"], ensure_ascii=False, indent=2))
         print("\n[Schema] sectors tab: " + " | ".join(SECTOR_HEADERS))
         print("[Schema] tokens tab:  " + " | ".join(TOKEN_HEADERS))
         log("OK", f"Dry run complete → {run_id}")
