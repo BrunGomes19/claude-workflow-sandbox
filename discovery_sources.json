@@ -1,7 +1,7 @@
 {
   "description": "Non-Reddit discovery sources for Phase 2 token discovery layer",
   "sources": [
-    { "label": "The Block RSS",               "url": "https://www.theblock.co/rss/index.xml",               "category": "crypto_news", "why_included": "Data-driven journalism on token launches, protocol upgrades, fundraising rounds.", "quality": 5, "type": "rss",      "fetchable": true  },
+    { "label": "The Block RSS",               "url": "https://www.theblock.co/rss/index.xml",               "category": "crypto_news", "why_included": "Data-driven journalism on token launches, protocol upgrades, fundraising rounds.", "quality": 5, "type": "rss",      "fetchable": false, "note": "404 as of 2026-03-01" },
     { "label": "Bankless Newsletter RSS",     "url": "https://banklesshq.com/rss",                           "category": "research",    "why_included": "Deep DeFi/L2 analysis with fundamentals-heavy language; strong investment_quality signal.", "quality": 5, "type": "rss",      "fetchable": false, "note": "SSL cert hostname mismatch 2026-03-01" },
     { "label": "Messari News RSS",            "url": "https://messari.io/rss/news.xml",                      "category": "research",    "why_included": "Institutional analysis with TVL/revenue/tokenomics language — top fundamentals_hint source.", "quality": 5, "type": "rss",      "fetchable": true  },
     { "label": "Decrypt RSS",                "url": "https://decrypt.co/feed",                              "category": "crypto_news", "why_included": "Broad crypto news coverage, high token discovery breadth, reliable RSS.", "quality": 4, "type": "rss",      "fetchable": true  },
