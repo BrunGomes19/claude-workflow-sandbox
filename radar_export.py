@@ -1408,6 +1408,29 @@ def sheets_append(service, spreadsheet_id: str, tab: str,
         body=body,
     ).execute()
 
+def ensure_sheet_headers(svc, sid: str, tab_name: str, headers: list[str]) -> None:
+    """
+    Idempotent: write header row to tab if missing or mismatched.
+    Never crashes the export — logs WARN and continues on any API error.
+    """
+    try:
+        result = svc.spreadsheets().values().get(
+            spreadsheetId=sid,
+            range=f"{tab_name}!A1:ZZ1",
+        ).execute()
+        existing = result.get("values", [[]])[0] if result.get("values") else []
+        if existing == headers:
+            return
+        svc.spreadsheets().values().update(
+            spreadsheetId=sid,
+            range=f"{tab_name}!A1",
+            valueInputOption="RAW",
+            body={"values": [headers]},
+        ).execute()
+        log("OK", f"Sheets: wrote header row to '{tab_name}' tab")
+    except Exception as exc:
+        log("WARN", f"Sheets: could not ensure headers for '{tab_name}': {exc}")
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # NOTION EXPORT
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1506,6 +1529,28 @@ def main():
                     help="Path to discovery fetch cache (currently unused — RSS is stateless)")
     ap.add_argument("--refresh-discovery", action="store_true",
                     help="Reserved for future discovery cache refresh")
+    ap.add_argument("--print-schema", action="store_true",
+                    help="Print expected Google Sheets schema and exit")
+
+    # --print-schema exits before any fetch/LLM — bypass required --run-mode
+    if "--print-schema" in sys.argv:
+        print("\n=== Google Sheets expected schema ===\n")
+        print("[sectors tab — 15 columns]")
+        print("run_id | gen_at | time_window | sector | score | confidence | status |")
+        print("narrative | for | against | invalidations | top_entities |")
+        print("subreddit_count | total_posts | kept_per_sector")
+        print()
+        print("[tokens tab — 17 columns]")
+        print("run_id | gen_at | sector | symbol | name | chain | spike_score |")
+        print("confidence | tier | status | thesis | catalysts | invalidations |")
+        print("date | discovery_sources | mentions | signal_source")
+        print()
+        print("=== Notion expected properties ===")
+        print("Title (title), RunMode (select), GeneratedAt (date),")
+        print("PostsAnalyzed (text), SectorCount (text), DiscoveryItems (text)")
+        print()
+        return
+
     args = ap.parse_args()
 
     now    = datetime.now(tz)
@@ -1855,6 +1900,18 @@ def main():
         ])
 
     # ─────────────────────────────────────────────────────────────────────────
+    SECTOR_HEADERS = [
+        "run_id", "gen_at", "time_window", "sector", "score", "confidence", "status",
+        "narrative", "for", "against", "invalidations", "top_entities",
+        "subreddit_count", "total_posts", "kept_per_sector",
+    ]
+    TOKEN_HEADERS = [
+        "run_id", "gen_at", "sector", "symbol", "name", "chain", "spike_score",
+        "confidence", "tier", "status", "thesis", "catalysts", "invalidations",
+        "date", "discovery_sources", "mentions", "signal_source",
+    ]
+
+    # ─────────────────────────────────────────────────────────────────────────
     # DRY RUN PREVIEW
     # ─────────────────────────────────────────────────────────────────────────
     if args.dry_run:
@@ -1869,6 +1926,8 @@ def main():
         print("  MARKDOWN PREVIEW")
         print("═"*60)
         print(md[:2000])
+        print("\n[Schema] sectors tab: " + " | ".join(SECTOR_HEADERS))
+        print("[Schema] tokens tab:  " + " | ".join(TOKEN_HEADERS))
         log("OK", f"Dry run complete → {run_id}")
         return
 
@@ -1883,14 +1942,17 @@ def main():
     # ─────────────────────────────────────────────────────────────────────────
     # GOOGLE SHEETS EXPORT
     # ─────────────────────────────────────────────────────────────────────────
+
     log("STEP", "Exporting to Google Sheets ...")
     svc = sheets_service(os.getenv("GSHEETS_SA_KEY"))
     sid = os.getenv("GSHEETS_SPREADSHEET_ID")
 
     if sector_rows:
+        ensure_sheet_headers(svc, sid, "sectors", SECTOR_HEADERS)
         sheets_append(svc, sid, "sectors", sector_rows)
         log("OK", f"Sheets: wrote {len(sector_rows)} sector rows")
     if token_rows:
+        ensure_sheet_headers(svc, sid, "tokens", TOKEN_HEADERS)
         sheets_append(svc, sid, "tokens", token_rows)
         log("OK", f"Sheets: wrote {len(token_rows)} token rows")
     if not sector_rows and not token_rows:
