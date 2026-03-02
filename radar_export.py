@@ -86,6 +86,58 @@ def fetch_with_retry(url, headers, timeout=30, max_retries=2,
     raise RuntimeError("fetch_with_retry: unreachable")
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# TOKEN REGISTRY
+# ═══════════════════════════════════════════════════════════════════════════════
+
+CONFIG_PATH = "config.json"
+
+def load_token_registry(cfg_path: str) -> list[dict]:
+    """Return the tokens list from config token_tracking.tokens."""
+    try:
+        with open(cfg_path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        return cfg.get("token_tracking", {}).get("tokens", [])
+    except Exception:
+        return []
+
+def upsert_token_registry(cfg_path: str, new_tokens: list[dict]) -> None:
+    """
+    Upsert tokens into config.json token_tracking.tokens.
+    - Updates last_seen + increments seen_count for existing symbols.
+    - Appends new symbols with first_seen = last_seen = today, seen_count = 1.
+    - Never removes entries. Writes atomically via .tmp + os.replace().
+    """
+    today = datetime.now(timezone.utc).date().isoformat()
+    with open(cfg_path, "r", encoding="utf-8") as f:
+        cfg = json.load(f)
+    registry: list[dict] = cfg.setdefault("token_tracking", {}).setdefault("tokens", [])
+    indexed = {r["symbol"]: r for r in registry if "symbol" in r}
+    for tok in new_tokens:
+        sym = tok.get("symbol", "").strip()
+        if not sym:
+            continue
+        if sym in indexed:
+            indexed[sym]["last_seen"]   = today
+            indexed[sym]["seen_count"]  = indexed[sym].get("seen_count", 0) + 1
+        else:
+            entry = {
+                "symbol":     sym,
+                "name":       tok.get("name", ""),
+                "sector":     tok.get("sector", ""),
+                "first_seen": today,
+                "last_seen":  today,
+                "seen_count": 1,
+            }
+            indexed[sym] = entry
+            registry.append(entry)
+    cfg["token_tracking"]["tokens"] = registry
+    tmp = cfg_path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, cfg_path)
+    log("OK", f"Token registry updated: {len(new_tokens)} token(s) upserted → {cfg_path}")
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # SECTOR TAXONOMY
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -1758,6 +1810,8 @@ def main():
     # ─────────────────────────────────────────────────────────────────────────
     if args.dry_run:
         log("INFO", f"[DRY RUN] {len(sector_rows)} sector rows | {len(token_rows)} token rows")
+        if args.run_mode == "TOKEN_SHORTLIST":
+            log("INFO", f"[DRY RUN] Would upsert {len(token_rows)} tokens")
         print("\n" + "═"*60)
         print("  JSON PREVIEW (first 5000 chars)")
         print("═"*60)
@@ -1768,6 +1822,14 @@ def main():
         print(md[:2000])
         log("OK", f"Dry run complete → {run_id}")
         return
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # TOKEN REGISTRY UPSERT
+    # ─────────────────────────────────────────────────────────────────────────
+    if args.run_mode == "TOKEN_SHORTLIST" and token_rows:
+        upsert_token_registry(CONFIG_PATH, [
+            {"symbol": r[3], "name": r[4], "sector": r[2]} for r in token_rows
+        ])
 
     # ─────────────────────────────────────────────────────────────────────────
     # GOOGLE SHEETS EXPORT
