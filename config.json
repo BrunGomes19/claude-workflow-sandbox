@@ -44,9 +44,8 @@
     { "name": "sui",                         "feeds": ["rising", "new"] }
   ],
   "discovery_subreddits": [
-    { "name": "ZeroXProtocol",                "feeds": ["new"] },
-    { "name": "ArtificialIntelligenceCrypto", "feeds": ["rising", "new"] },
-    { "name": "HyperliquidTrading",           "feeds": ["rising", "new"] }
+    { "name": "ZeroXProtocol",       "feeds": ["new"] },
+    { "name": "HyperliquidTrading",  "feeds": ["rising", "new"] }
   ],
   "core_subreddits": [
     { "name": "CryptoTechnology",            "feeds": ["rising", "new"] },
