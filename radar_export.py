@@ -1462,6 +1462,18 @@ def main():
         )
         log("INFO", f"Evidence pack: {len(evidence)} sources ready")
 
+        # Write cycle summary artifact atomically
+        _cycle_date   = datetime.now(timezone.utc).strftime("%Y%m%d")
+        _dated_path   = f"data/cycle_summary_{_cycle_date}.json"
+        _latest_path  = "data/cycle_summary_latest.json"
+        _artifact     = json.dumps(evidence, indent=2, ensure_ascii=False)
+        for _dst in (_dated_path, _latest_path):
+            _tmp = _dst + ".tmp"
+            with open(_tmp, "w", encoding="utf-8") as _f:
+                _f.write(_artifact)
+            os.replace(_tmp, _dst)
+        log("OK", f"Cycle artifact: {_latest_path}")
+
         MAX_RETRIES = 3
         for attempt in range(MAX_RETRIES):
             try:
