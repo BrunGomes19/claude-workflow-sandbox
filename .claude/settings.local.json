@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(PYTHONIOENCODING=utf-8 python:*)",
+      "Bash(gh pr:*)",
+      "Bash(source:*)",
+      "Bash(python3:*)"
+    ]
+  }
+}
